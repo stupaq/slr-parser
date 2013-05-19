@@ -1,6 +1,7 @@
 % JPP; zadanie 3; Mateusz Machalica; 305678
 
 :- use_module(library(lists)).
+:- expects_dialect(sicstus).
 
 % Exported
 % createSLR1(+Grammar, -Automata, -Info)
@@ -11,18 +12,25 @@
 % grammar's start symbol
 
 % follow(+Grammar, -FollowSets)
+follow(Grammar, Set) :-
+  setof(follow(N, NSet), follow(Grammar, nt(N), NSet), Set). % FIXME
 
 % follow(+Grammar, +Nonterminal, -FollowSet)
 follow(Grammar, nt(N), Set) :-
   setof(X, follow(Grammar, nt(N), X, []), Set). % FIXME
+follow(Grammar, nt(N), []) :-
+  nonterminal(Grammar, nt(N)),
+  not(follow(Grammar, nt(N), _, [])).
 
 % follow(+Grammar, +Nonterminal, +Terminal, +Guard)
 follow(Grammar, nt(N), T, Guard) :-
+  terminal(Grammar, T),
   rule(Grammar, nt(_), Rhs, Id),
   not(member(Id, Guard)),
   append([_, [nt(N)], B], Rhs),
   first(Grammar, B, T).
 follow(Grammar, nt(N), T, Guard) :-
+  terminal(Grammar, T),
   rule(Grammar, nt(X), Rhs, Id),
   not(member(Id, Guard)),
   append([_, [nt(N)], B], Rhs),
@@ -41,7 +49,7 @@ first(Grammar, [nt(N) | _], T, Guard) :-
   first(Grammar, Rhs, T, [Id | Guard]).
 first(Grammar, Sentence, T, Guard) :-
   append([A, B], Sentence),
-  A \= [],
+  not(empty(A)),
   nullable(Grammar, A),
   first(Grammar, B, T, Guard).
 
@@ -70,11 +78,27 @@ rule([_ | Rest], nt(N), Rhs) :-
 rule(Grammar, nt(N), Rhs, ident(N, Rhs)) :-
   rule(Grammar, nt(N), Rhs).
 
+% nonterminal(+Grammar, +Nonterminal)
+nonterminal([prod(N, _) | _], nt(N)).
+nonterminal([_ | Rest], nt(N)) :-
+  nonterminal(Rest, nt(N)).
+
+% terminal(+Grammar, +Terminal)
+terminal([prod(_, RhsList) | _], T) :-
+  append(RhsList, All),
+  member(T, All),
+  T \= nt(_).
+terminal([_ | Rest], T) :-
+  terminal(Rest, T).
+
 % Helpers
 % intersect(+List1, +List2)
 intersect(List1, List2) :-
   member(X, List1),
   member(X, List2).
+
+% empty(+List)
+empty([]).
 
 % Official tests
 % test(+GrammarName, +WordList)
