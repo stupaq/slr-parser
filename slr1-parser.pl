@@ -2,10 +2,81 @@
 
 :- use_module(library(lists)).
 
+% Exported
 % createSLR1(+Grammar, -Automata, -Info)
+
 % accept(+Automata, +Word)
+
+% Entire follow/* logic requires all nonterminals to be reachable from
+% grammar's start symbol
+
 % follow(+Grammar, -FollowSets)
 
+% follow(+Grammar, +Nonterminal, -FollowSet)
+follow(Grammar, nt(N), Set) :-
+  setof(X, follow(Grammar, nt(N), X, []), Set). % FIXME
+
+% follow(+Grammar, +Nonterminal, +Terminal, +Guard)
+follow(Grammar, nt(N), T, Guard) :-
+  rule(Grammar, nt(_), Rhs, Id),
+  not(member(Id, Guard)),
+  append([_, [nt(N)], B], Rhs),
+  first(Grammar, B, T).
+follow(Grammar, nt(N), T, Guard) :-
+  rule(Grammar, nt(X), Rhs, Id),
+  not(member(Id, Guard)),
+  append([_, [nt(N)], B], Rhs),
+  nullable(Grammar, B),
+  follow(Grammar, nt(X), T, [Id | Guard]).
+
+% Grammar properties
+% first(+Grammar, +SententialForm, +Terminal)
+first(Grammar, Sentence, T) :-
+  first(Grammar, Sentence, T, []).
+% first(+Grammar, +SententialForm, +Terminal, +Guard)
+first(_, [T | _], T, _).
+first(Grammar, [nt(N) | _], T, Guard) :-
+  rule(Grammar, nt(N), Rhs, Id),
+  not(member(Id, Guard)), % first(Rhs, T) :- first(Rhs, T), ...
+  first(Grammar, Rhs, T, [Id | Guard]).
+first(Grammar, Sentence, T, Guard) :-
+  append([A, B], Sentence),
+  A \= [],
+  nullable(Grammar, A),
+  first(Grammar, B, T, Guard).
+
+% nullable(+Grammar, +SententialForm)
+nullable(Grammar, Sentence) :-
+  nullable(Grammar, Sentence, []).
+% nullable(+Grammar, +SententialForm, +Guard)
+nullable(_, [], _).
+nullable(Grammar, [nt(N) | Rest], Guard) :-
+  nullable(Grammar, nt(N), Guard),
+  nullable(Grammar, Rest, Guard).
+% nullable(+Grammar, +Nonterminal, +Guard)
+nullable(Grammar, nt(N), Guard) :-
+  rule(Grammar, nt(N), Rhs),
+  not(intersect(Rhs, [N | Guard])), % nullable(A) :- nullable(A), ...
+  nullable(Grammar, Rhs, [N | Guard]).
+
+% Grammar accessors
+% rule(+Grammar, +Nonterminal, -ProductionRhs)
+rule([prod(N, RhsList) | _], nt(N), Rhs) :-
+  member(Rhs, RhsList).
+rule([_ | Rest], nt(N), Rhs) :-
+  rule(Rest, nt(N), Rhs).
+
+% rule(+Grammar, +Nonterminal, -ProductionRhs, -Ident)
+rule(Grammar, nt(N), Rhs, ident(N, Rhs)) :-
+  rule(Grammar, nt(N), Rhs).
+
+% Helpers
+% intersect(+List1, +List2)
+intersect(List1, List2) :-
+  member(X, List1),
+  member(X, List2).
+
+% Official tests
 % test(+GrammarName, +WordList)
 test(NG, ListaSlow) :-
   grammar(NG, G),
