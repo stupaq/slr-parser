@@ -1,15 +1,47 @@
 % JPP; zadanie 3; Mateusz Machalica; 305678
 
+%% Algebraic types
+% item(ProductionNonterminal, ProductionRhs, DotPosition)
+% ident(ProductionNonterminal, ProductionRhs)
+
 :- use_module(library(lists)).
 :- expects_dialect(sicstus).
 
-% Exported
-% createSLR1(+Grammar, -Automata, -Info)
+% createSLR1(+Grammar, -Automaton, -Info)
 
-% accept(+Automata, +Word)
+% goto(+SourceClosure, +Symbol, -DestinationKernel)
+goto(Source, Symbol, Destination) :-
+  goto(Source, Symbol, [], Destination).
+% goto(+SourceClosure, +Symbol, +Acc, -DestinationKernel)
+goto(Source, Symbol, Acc, Destination) :-
+  member(item(N, NRhs, NDot), Source),
+  append([A, [Symbol], _], NRhs),
+  length(A, NDot),
+  XDot is NDot + 1,
+  X = item(N, NRhs, XDot),
+  \+ member(X, Acc), !,
+  goto(Source, Symbol, [X | Acc], Destination).
+goto(_, _, Destination, Destination).
 
-% Entire follow/* logic requires all nonterminals to be reachable from
-% grammar's start symbol
+% closure(+Grammar, +Set, -SetClosure)
+closure(Grammar, Set, Closure) :-
+  closure(Grammar, Set, [], Closure).
+% closure(+Grammar, +Set, +Acc, -SetClosure)
+closure(Grammar, Set, Acc, Closure) :-
+  member(X, Set),
+  \+ member(X, Acc), !,
+  closure(Grammar, Set, [X | Acc], Closure).
+closure(Grammar, Set, Acc, Closure) :-
+  member(item(_, Rhs, Dot), Set),
+  length(A, Dot),
+  append([A, [nt(N)], _], Rhs),
+  rule(Grammar, nt(N), NRhs),
+  X = item(N, NRhs, 0),
+  \+ member(X, Acc), !,
+  closure(Grammar, Set, [X | Acc], Closure).
+closure(_, _, Closure, Closure).
+
+% accept(+Automaton, +Word)
 
 % follow(+Grammar, -FollowSets)
 follow(Grammar, Set) :-
@@ -21,7 +53,6 @@ follow(Grammar, nt(N), Set) :-
 follow(Grammar, nt(N), []) :-
   nonterminal(Grammar, nt(N)),
   not(follow(Grammar, nt(N), _, [])).
-
 % follow(+Grammar, +Nonterminal, +Terminal, +Guard)
 follow(Grammar, nt(N), T, Guard) :-
   terminal(Grammar, T),
@@ -37,7 +68,6 @@ follow(Grammar, nt(N), T, Guard) :-
   nullable(Grammar, B),
   follow(Grammar, nt(X), T, [Id | Guard]).
 
-% Grammar properties
 % first(+Grammar, +SententialForm, +Terminal)
 first(Grammar, Sentence, T) :-
   first(Grammar, Sentence, T, []).
@@ -67,13 +97,11 @@ nullable(Grammar, nt(N), Guard) :-
   not(intersect(Rhs, [N | Guard])), % nullable(A) :- nullable(A), ...
   nullable(Grammar, Rhs, [N | Guard]).
 
-% Grammar accessors
 % rule(+Grammar, +Nonterminal, -ProductionRhs)
 rule([prod(N, RhsList) | _], nt(N), Rhs) :-
   member(Rhs, RhsList).
 rule([_ | Rest], nt(N), Rhs) :-
   rule(Rest, nt(N), Rhs).
-
 % rule(+Grammar, +Nonterminal, -ProductionRhs, -Ident)
 rule(Grammar, nt(N), Rhs, ident(N, Rhs)) :-
   rule(Grammar, nt(N), Rhs).
@@ -91,7 +119,7 @@ terminal([prod(_, RhsList) | _], T) :-
 terminal([_ | Rest], T) :-
   terminal(Rest, T).
 
-% Helpers
+%% Helpers
 % intersect(+List1, +List2)
 intersect(List1, List2) :-
   member(X, List1),
@@ -100,14 +128,14 @@ intersect(List1, List2) :-
 % empty(+List)
 empty([]).
 
-% Official tests
+%% Official tests
 % test(+GrammarName, +WordList)
 test(NG, ListaSlow) :-
   grammar(NG, G),
   createSLR1(G, Automat, ok),
   checkWords(ListaSlow, Automat).
 
-% checkWords(+WordList, +Automata)
+% checkWords(+WordList, +Automaton)
 checkWords([], _) :-
   write('Koniec testu.\n').
 checkWords([S|RS], Automat) :-
