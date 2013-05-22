@@ -33,7 +33,7 @@ makeGraph(Grammar, _, _, [], [State | Rest], Acc, Graph) :-
 makeGraph(Grammar, SrcClosure, SrcId, [Symbol | Symbols], States,
     graph(States, Transitions), Graph) :-
   transition(SrcClosure, Symbol, DstKernel),
-  (empty(DstKernel) ->
+  (DstKernel = [] ->
     makeGraph(Grammar, SrcClosure, SrcId, Symbols, Todo1, graph(States1,
         Transitions1), Graph)
   ; (member(state(DstKernel, DstId), States) ->
@@ -64,40 +64,31 @@ symbols([item(N, NRhs, _) | Rest], Acc, Symbols) :-
 
 % transition(+SourceClosure, +Symbol, -DestinationKernel)
 transition(Source, Symbol, Destination) :-
-  transition(Source, Symbol, [], Destination).
-% transition(+SourceClosure, +Symbol, +Acc, -DestinationKernel)
-transition([], _, Destination, Destination).
-transition(Source, Symbol, Acc, Destination) :-
-  [item(N, NRhs, NDot) | Rest] = Source,
-  (append([A, [Symbol], _], NRhs) ->
-    length(A, NDot),
-    XDot is NDot + 1,
-    X = item(N, NRhs, XDot),
-    (member(X, Acc) ->
-      transition(Rest, Symbol, Acc, Destination)
-    ; transition(Source, Symbol, [X | Acc], Destination)
-    )
-  ; transition(Rest, Symbol, Acc, Destination)
-  ).
+  fix(transitionIter, [(Symbol, []) | Source], (_, Destination)).
+% transitionIter(+(Symbol, Acc), +Item, -(Symbol, Acc1))
+transitionIter((Symbol, Acc), item(N, NRhs, NDot), (Symbol, Acc1)) :-
+  append([A, [Symbol], _], NRhs),
+  length(A, NDot),
+  XDot is NDot + 1,
+  X = item(N, NRhs, XDot),
+  \+ member(X, Acc),
+  Acc1 = [X | Acc].
 
 % closure(+Grammar, +Set, -SetClosure)
 closure(Grammar, Set, Closure) :-
-  closure(Grammar, Set, Set, Closure).
-% closure(+Grammar, +Set, +Acc, -SetClosure)
-closure(_, [], Closure, Closure).
-closure(Grammar, Set, Acc, Closure) :-
-  select(item(_, Rhs, Dot), Set, Rest),
-  length(A, Dot),
+  fix(closureIter, [(Grammar, Set) | Set], (_, Closure)).
+% closureIter(+(Grammar, Acc), +Item, -(Grammar, Acc1))
+closureIter((Grammar, Acc), item(_, Rhs, Dot), (Grammar, Acc1)) :-
   append([A, [nt(N)], _], Rhs),
+  length(A, Dot),
   rule(Grammar, nt(N), NRhs),
   X = item(N, NRhs, 0),
-  (member(X, Acc) ->
-    closure(Grammar, Rest, Acc, Closure)
-  ; closure(Grammar, Set, [X | Acc], Closure)
-  ).
+  \+ member(X, Acc),
+  Acc1 = [X | Acc].
 
 % accept(+Automaton, +Word)
 
+% FIXME rewrite to fix/3 or similar mechanism
 % follow(+Grammar, -FollowSets)
 follow(Grammar, Set) :-
   setof(follow(N, NSet), follow(Grammar, nt(N), NSet), Set). % FIXME
@@ -134,7 +125,7 @@ first(Grammar, [nt(N) | _], T, Guard) :-
   first(Grammar, Rhs, T, [Id | Guard]).
 first(Grammar, Sentence, T, Guard) :-
   append([A, B], Sentence),
-  \+ empty(A),
+  \+ A = [],
   nullable(Grammar, A),
   first(Grammar, B, T, Guard).
 
@@ -173,6 +164,7 @@ terminal([prod(_, RhsList) | _], T) :-
   T \= nt(_).
 terminal([_ | Rest], T) :-
   terminal(Rest, T).
+% FIXME end
 
 %% Helpers
 % intersect(+List1, +List2)
@@ -180,8 +172,14 @@ intersect(List1, List2) :-
   member(X, List1),
   member(X, List2).
 
-% empty(+List)
-empty([]).
+% Predicate is a transformation parametrized by Elem, for each parameter from
+% the list the transformation is applied until first failure.
+% fix(:Predicate(+Accumulator, +Elem, -Result), +[Accumulator | List], -Result)
+fix(_, [Result], Result).
+fix(Fun, [Acc , Elem | Rest], Result) :-
+  (call(Fun, Acc, Elem, Acc1) ->
+    fix(Fun, [Acc1 , Elem | Rest], Result)
+  ; fix(Fun, [Acc | Rest], Result)).
 
 %% Official tests
 % test(+GrammarName, +WordList)
