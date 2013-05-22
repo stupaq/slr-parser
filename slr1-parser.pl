@@ -1,42 +1,84 @@
 % JPP; zadanie 3; Mateusz Machalica; 305678
 
 %% Algebraic types
+% prod(Nonterminal, RhsList)
 % item(ProductionNonterminal, ProductionRhs, DotPosition)
 % ident(ProductionNonterminal, ProductionRhs)
-% state(ItemsSetClosure, IntegerId)
-% automaton(States, Transitions)
+% state(ItemsSetKernel, StateId)
+% graph(States, Transitions)
 % trans(SourceId, Symbol, DestinationId)
 
 :- use_module(library(lists)).
 
 % createSLR1(+Grammar, -Automaton, -Info)
-createSLR1(Grammar, Automaton, Info).
+createSLR1(Grammar, Automaton, Info) :-
+  makeGraph(Grammar, AutomatonGraph),
+  % TODO
+  Automaton = AutomatonGraph,
+  Info = ok.
 
-% symbols(+Grammar, -Symbols)
-symbols(Grammar, Symbols) :-
-  symbols(Grammar, [], Symbols).
-% symbols(+Grammar, +Acc, -Symbols)
+% makeGraph(+Grammar, -AutomatonGraph)
+makeGraph(Grammar, Graph) :-
+  [prod(S, _) | _] = Grammar,
+  Initial = state([item('Z', [nt(S), '#'], 0)], 0),
+  makeGraph(Grammar, null, null, [], [Initial], graph([Initial], []), Graph).
+% makeGraph(+Grammar, +SrcClosure, +SrcId, +TodoSymbols, +TodoStates, +Acc, -Graph)
+makeGraph(_, _, _, [], [], Graph, Graph).
+makeGraph(Grammar, _, _, [], [State | Rest], Acc, Graph) :-
+  state(Kernel, Id) = State,
+  closure(Grammar, Kernel, Closure),
+  symbols(Closure, Symbols),
+  % symbols that do not occur in any of items will not generate any transitions
+  makeGraph(Grammar, Closure, Id, Symbols, Rest, Acc, Graph).
+makeGraph(Grammar, SrcClosure, SrcId, [Symbol | Symbols], States,
+    graph(States, Transitions), Graph) :-
+  transition(SrcClosure, Symbol, DstKernel),
+  (empty(DstKernel) ->
+    makeGraph(Grammar, SrcClosure, SrcId, Symbols, Todo1, graph(States1,
+        Transitions1), Graph)
+  ; (member(state(DstKernel, DstId), States) ->
+      Todo1 = Todo,
+      States1 = States
+    ; length(States, DstId),
+      Todo1 = [state(DstKernel, DstId) | Todo],
+      States1 = [state(DstKernel, DstId) | States]
+    ),
+    Trans = trans(SrcId, Symbol, DstId),
+    (member(Trans, Transitions) ->
+      Transitions1 = Transitions
+    ; Transitions1 = [Trans | Transitions]
+    ),
+    makeGraph(Grammar, SrcClosure, SrcId, Symbols, Todo1, graph(States1,
+        Transitions1), Graph)
+  ).
+
+% symbols(+Set, -Symbols)
+symbols(Items, Symbols) :-
+  symbols(Items, [], Symbols).
+% symbols(+Items, +Acc, -Symbols)
 symbols([], Symbols, Symbols).
-symbols([prod(N, NRhsList) | Rest], Acc, Symbols) :-
-  append(NRhsList, Temp),
-  remove_dups([N | Temp], All),
-  append([Acc, All], Acc1),
+symbols([item(N, NRhs, _) | Rest], Acc, Symbols) :-
+  append([[nt(N) | NRhs], Acc], Temp),
+  remove_dups(Temp, Acc1),
   symbols(Rest, Acc1, Symbols).
 
-% goto(+SourceClosure, +Symbol, -DestinationKernel)
-goto(Source, Symbol, Destination) :-
-  goto(Source, Symbol, [], Destination).
-% goto(+SourceClosure, +Symbol, +Acc, -DestinationKernel)
-goto([], _, Destination, Destination).
-goto(Source, Symbol, Acc, Destination) :-
+% transition(+SourceClosure, +Symbol, -DestinationKernel)
+transition(Source, Symbol, Destination) :-
+  transition(Source, Symbol, [], Destination).
+% transition(+SourceClosure, +Symbol, +Acc, -DestinationKernel)
+transition([], _, Destination, Destination).
+transition(Source, Symbol, Acc, Destination) :-
   [item(N, NRhs, NDot) | Rest] = Source,
-  append([A, [Symbol], _], NRhs),
-  length(A, NDot),
-  XDot is NDot + 1,
-  X = item(N, NRhs, XDot),
-  (member(X, Acc) ->
-    goto(Rest, Symbol, Acc, Destination)
-  ; goto(Source, Symbol, [X | Acc], Destination)).
+  (append([A, [Symbol], _], NRhs) ->
+    length(A, NDot),
+    XDot is NDot + 1,
+    X = item(N, NRhs, XDot),
+    (member(X, Acc) ->
+      transition(Rest, Symbol, Acc, Destination)
+    ; transition(Source, Symbol, [X | Acc], Destination)
+    )
+  ; transition(Rest, Symbol, Acc, Destination)
+  ).
 
 % closure(+Grammar, +Set, -SetClosure)
 closure(Grammar, Set, Closure) :-
@@ -51,7 +93,8 @@ closure(Grammar, Set, Acc, Closure) :-
   X = item(N, NRhs, 0),
   (member(X, Acc) ->
     closure(Grammar, Rest, Acc, Closure)
-  ; closure(Grammar, Set, [X | Acc], Closure)).
+  ; closure(Grammar, Set, [X | Acc], Closure)
+  ).
 
 % accept(+Automaton, +Word)
 
