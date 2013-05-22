@@ -17,41 +17,35 @@ createSLR1(Grammar, Automaton, Info) :-
   Automaton = AutomatonGraph,
   Info = ok.
 
-% makeGraph(+Grammar, -AutomatonGraph)
-makeGraph(Grammar, Graph) :-
+% FIXME
+% createGraph(+Grammar, -AutomatonGraph)
+createGraph(Grammar, Graph) :-
   [prod(S, _) | _] = Grammar,
   Initial = state([item('Z', [nt(S), '#'], 0)], 0),
-  makeGraph(Grammar, null, null, [], [Initial], graph([Initial], []), Graph).
-% makeGraph(+Grammar, +SrcClosure, +SrcId, +TodoSymbols, +TodoStates, +Acc, -Graph)
-makeGraph(_, _, _, [], [], Graph, Graph).
-makeGraph(Grammar, _, _, [], [State | Rest], Acc, Graph) :-
-  state(Kernel, Id) = State,
+  createGraph(Grammar, [Initial], graph([Initial], []), Graph).
+% createGraph(+Grammar, +TodoStates, +Acc, -Graph)
+createGraph(_, [], Graph, Graph).
+createGraph(Grammar, [state(Kernel, Id) | Todo], Graph, Result) :-
   closure(Grammar, Kernel, Closure),
   symbols(Closure, Symbols),
-  % symbols that do not occur in any of items will not generate any transitions
-  makeGraph(Grammar, Closure, Id, Symbols, Rest, Acc, Graph).
-makeGraph(Grammar, SrcClosure, SrcId, [Symbol | Symbols], Todo,
-    graph(States, Transitions), Graph) :-
+  fix(createTrans, (Closure, Id), [(Todo, Graph) | Symbols], (Todo1, Graph1)),
+  createGraph(Grammar, Todo1, Graph1, Result).
+% createTrans(+(SrcClosure, SrcId), +(TodoStates, Graph), +Symbol,
+%     +(TodoStates, Graph))
+createTrans((SrcClosure, SrcId), (Todo, graph(States, Transitions)),
+    Symbol, (Todo1, graph(States1, Transitions1))) :-
   transition(SrcClosure, Symbol, DstKernel),
-  (DstKernel = [] ->
-    makeGraph(Grammar, SrcClosure, SrcId, Symbols, Todo1, graph(States1,
-        Transitions1), Graph)
-  ; (member(state(DstKernel, DstId), States) ->
-      Todo1 = Todo,
-      States1 = States
-    ; length(States, DstId),
-      Todo1 = [state(DstKernel, DstId) | Todo],
-      States1 = [state(DstKernel, DstId) | States]
-    ),
-    Trans = trans(SrcId, Symbol, DstId),
-    (member(Trans, Transitions) ->
-      Transitions1 = Transitions
-    ; Transitions1 = [Trans | Transitions]
-    ),
-    makeGraph(Grammar, SrcClosure, SrcId, Symbols, Todo1, graph(States1,
-        Transitions1), Graph)
-  ).
-% processState(+(SrcClosure, Graph), +Symbol, +(State, Graph))
+  DstKernel \= [],
+  (member(state(DstKernel, DstId), States) ->
+    Todo1 = Todo,
+    States1 = States
+  ; length(States, DstId),
+    Todo1 = [state(DstKernel, DstId) | Todo],
+    States1 = [state(DstKernel, DstId) | States]
+  ),
+  Trans = trans(SrcId, Symbol, DstId),
+  \+ member(Trans, Transitions),
+  Transitions1 = [Trans | Transitions].
 
 % symbols(+Set, -Symbols)
 symbols(Items, Symbols) :-
