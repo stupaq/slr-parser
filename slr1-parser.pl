@@ -13,33 +13,31 @@
 goto(Source, Symbol, Destination) :-
   goto(Source, Symbol, [], Destination).
 % goto(+SourceClosure, +Symbol, +Acc, -DestinationKernel)
+goto([], _, Destination, Destination).
 goto(Source, Symbol, Acc, Destination) :-
-  member(item(N, NRhs, NDot), Source),
+  select(item(N, NRhs, NDot), Source, Rest),
   append([A, [Symbol], _], NRhs),
   length(A, NDot),
   XDot is NDot + 1,
   X = item(N, NRhs, XDot),
-  \+ member(X, Acc), !,
-  goto(Source, Symbol, [X | Acc], Destination).
-goto(_, _, Destination, Destination).
+  (member(X, Acc) ->
+    goto(Rest, Symbol, Acc, Destination)
+  ; goto(Source, Symbol, [X | Acc], Destination)).
 
 % closure(+Grammar, +Set, -SetClosure)
 closure(Grammar, Set, Closure) :-
-  closure(Grammar, Set, [], Closure).
+  closure(Grammar, Set, Set, Closure).
 % closure(+Grammar, +Set, +Acc, -SetClosure)
+closure(_, [], Closure, Closure).
 closure(Grammar, Set, Acc, Closure) :-
-  member(X, Set),
-  \+ member(X, Acc), !,
-  closure(Grammar, Set, [X | Acc], Closure).
-closure(Grammar, Set, Acc, Closure) :-
-  member(item(_, Rhs, Dot), Set),
+  select(item(_, Rhs, Dot), Set, Rest),
   length(A, Dot),
   append([A, [nt(N)], _], Rhs),
   rule(Grammar, nt(N), NRhs),
   X = item(N, NRhs, 0),
-  \+ member(X, Acc), !,
-  closure(Grammar, Set, [X | Acc], Closure).
-closure(_, _, Closure, Closure).
+  (member(X, Acc) ->
+    closure(Grammar, Rest, Acc, Closure)
+  ; closure(Grammar, Set, [X | Acc], Closure)).
 
 % accept(+Automaton, +Word)
 
@@ -52,18 +50,18 @@ follow(Grammar, nt(N), Set) :-
   setof(X, follow(Grammar, nt(N), X, []), Set). % FIXME
 follow(Grammar, nt(N), []) :-
   nonterminal(Grammar, nt(N)),
-  not(follow(Grammar, nt(N), _, [])).
+  \+ follow(Grammar, nt(N), _, []).
 % follow(+Grammar, +Nonterminal, +Terminal, +Guard)
 follow(Grammar, nt(N), T, Guard) :-
   terminal(Grammar, T),
   rule(Grammar, nt(_), Rhs, Id),
-  not(member(Id, Guard)),
+  \+ member(Id, Guard),
   append([_, [nt(N)], B], Rhs),
   first(Grammar, B, T).
 follow(Grammar, nt(N), T, Guard) :-
   terminal(Grammar, T),
   rule(Grammar, nt(X), Rhs, Id),
-  not(member(Id, Guard)),
+  \+ member(Id, Guard),
   append([_, [nt(N)], B], Rhs),
   nullable(Grammar, B),
   follow(Grammar, nt(X), T, [Id | Guard]).
@@ -75,11 +73,11 @@ first(Grammar, Sentence, T) :-
 first(_, [T | _], T, _).
 first(Grammar, [nt(N) | _], T, Guard) :-
   rule(Grammar, nt(N), Rhs, Id),
-  not(member(Id, Guard)), % first(Rhs, T) :- first(Rhs, T), ...
+  \+ member(Id, Guard), % first(Rhs, T) :- first(Rhs, T), ...
   first(Grammar, Rhs, T, [Id | Guard]).
 first(Grammar, Sentence, T, Guard) :-
   append([A, B], Sentence),
-  not(empty(A)),
+  \+ empty(A),
   nullable(Grammar, A),
   first(Grammar, B, T, Guard).
 
@@ -94,7 +92,7 @@ nullable(Grammar, [nt(N) | Rest], Guard) :-
 % nullable(+Grammar, +Nonterminal, +Guard)
 nullable(Grammar, nt(N), Guard) :-
   rule(Grammar, nt(N), Rhs),
-  not(intersect(Rhs, [N | Guard])), % nullable(A) :- nullable(A), ...
+  \+ intersect(Rhs, [N | Guard]), % nullable(A) :- nullable(A), ...
   nullable(Grammar, Rhs, [N | Guard]).
 
 % rule(+Grammar, +Nonterminal, -ProductionRhs)
