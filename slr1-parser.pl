@@ -3,11 +3,25 @@
 %% Algebraic types
 % item(ProductionNonterminal, ProductionRhs, DotPosition)
 % ident(ProductionNonterminal, ProductionRhs)
+% state(ItemsSetClosure, IntegerId)
+% automaton(States, Transitions)
+% trans(SourceId, Symbol, DestinationId)
 
 :- use_module(library(lists)).
-:- expects_dialect(sicstus).
 
 % createSLR1(+Grammar, -Automaton, -Info)
+createSLR1(Grammar, Automaton, Info).
+
+% symbols(+Grammar, -Symbols)
+symbols(Grammar, Symbols) :-
+  symbols(Grammar, [], Symbols).
+% symbols(+Grammar, +Acc, -Symbols)
+symbols([], Symbols, Symbols).
+symbols([prod(N, NRhsList) | Rest], Acc, Symbols) :-
+  append(NRhsList, Temp),
+  remove_dups([N | Temp], All),
+  append([Acc, All], Acc1),
+  symbols(Rest, Acc1, Symbols).
 
 % goto(+SourceClosure, +Symbol, -DestinationKernel)
 goto(Source, Symbol, Destination) :-
@@ -15,7 +29,7 @@ goto(Source, Symbol, Destination) :-
 % goto(+SourceClosure, +Symbol, +Acc, -DestinationKernel)
 goto([], _, Destination, Destination).
 goto(Source, Symbol, Acc, Destination) :-
-  select(item(N, NRhs, NDot), Source, Rest),
+  [item(N, NRhs, NDot) | Rest] = Source,
   append([A, [Symbol], _], NRhs),
   length(A, NDot),
   XDot is NDot + 1,
