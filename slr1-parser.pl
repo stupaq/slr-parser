@@ -6,18 +6,21 @@
 % ident(ProductionNonterminal, ProductionRhs)
 % state(ItemsSetKernel, StateId)
 % graph(States, Transitions)
-% trans(SourceId, Symbol, DestinationId)
+% slr1(Actions)
+% action(SourceId, Symbol, ShiftOrReduceOrGoto)
+% shift(StateId)
+% goto(StateId)
+% reduce(Nonterminal, Terminal)
+% accept
 
 :- use_module(library(lists)).
 
 % createSLR1(+Grammar, -Automaton, -Info)
 createSLR1(Grammar, Automaton, Info) :-
-  makeGraph(Grammar, AutomatonGraph),
+  makeGraph(Grammar, graph(States, Transitions)),
   % TODO
-  Automaton = AutomatonGraph,
-  Info = ok.
+  fail.
 
-% FIXME
 % createGraph(+Grammar, -AutomatonGraph)
 createGraph(Grammar, Graph) :-
   [prod(S, _) | _] = Grammar,
@@ -43,7 +46,10 @@ createTrans((SrcClosure, SrcId), (Todo, graph(States, Transitions)),
     Todo1 = [state(DstKernel, DstId) | Todo],
     States1 = [state(DstKernel, DstId) | States]
   ),
-  Trans = trans(SrcId, Symbol, DstId),
+  (Symbol = nt(_) ->
+    Trans = action(SrcId, Symbol, goto(DstId))
+  ; Trans = action(SrcId, Symbol, shift(DstId))
+  ),
   \+ member(Trans, Transitions),
   Transitions1 = [Trans | Transitions].
 
@@ -62,8 +68,7 @@ transition(Source, Symbol, Destination) :-
   fix(transitionIter, Symbol, [[] | Source], Destination).
 % transitionIter(+Symbol, +KernelPart, +Item, -KernelPart1)
 transitionIter(Symbol, Acc, item(N, NRhs, NDot), [X | Acc]) :-
-  append([A, [Symbol], _], NRhs),
-  length(A, NDot),
+  append_length([Symbol | _], NRhs, NDot),
   XDot is NDot + 1,
   X = item(N, NRhs, XDot),
   \+ member(X, Acc).
@@ -73,13 +78,32 @@ closure(Grammar, Set, Closure) :-
   fix(closureIter, Grammar, [Set | Set], Closure).
 % closureIter(+Grammar, +ClosurePart, +Item, -ClosurePart1)
 closureIter(Grammar, Acc, item(_, Rhs, Dot), [X | Acc]) :-
-  append([A, [nt(N)], _], Rhs),
-  length(A, Dot),
+  append_length([nt(N) | _], Rhs, Dot),
   rule(Grammar, nt(N), NRhs),
   X = item(N, NRhs, 0),
   \+ member(X, Acc).
 
 % accept(+Automaton, +Word)
+accept(Automaton, Word) :-
+  append([Word, ['#']], Word1),
+  accept(Automaton, [0], Word1).
+% accept(+Automaton, +Stack, +Word)
+accept(slr1(Actions), Stack, [A | Rest]) :-
+  [StateId | _] = Stack,
+  member(action(StateId, A, shift(DstId)), Actions),
+  accept(slr1(Actions), [(DstId, A) | Stack], Rest).
+accept(slr1(Actions), Stack, [A | Rest]) :-
+  [StateId | _] = Stack,
+  member(action(StateId, A, reduce(N, Rhs)), Actions),
+  length(Rhs, RhsLen),
+  append_length(Stack1, Stack, RhsLen),
+  [TempId | _] = Stack1,
+  member(action(TempId, nt(N), goto(DstId)), Actions),
+  accept(slr1(Actions), [DstId | Stack1], [A | Rest]).
+accept(slr1(Actions), [(StateId, _) | _], [A | _]) :-
+  member(action(StateId, A, accept), Actions).
+% could not find an action, do not backtrack as this is deterministic
+accept(_, _, _) :- !, fail. % FIXME
 
 % FIXME rewrite to fix/4 or similar mechanism
 % follow(+Grammar, -FollowSets)
