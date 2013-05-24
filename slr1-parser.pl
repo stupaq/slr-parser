@@ -10,21 +10,54 @@
 % action(SourceId, Symbol, ShiftOrReduceOrGoto)
 % shift(StateId)
 % goto(StateId)
-% reduce(Nonterminal, Terminal)
+% reduce(Nonterminal, ProductionRhs)
 % accept
+% follow(Nonterminal, TerminalsSet)
 
 :- use_module(library(lists)).
 
 % createSLR1(+Grammar, -Automaton, -Info)
-createSLR1(Grammar, Automaton, Info) :-
-  makeGraph(Grammar, graph(States, Transitions)),
-  % TODO
-  fail.
+createSLR1(Original, Automaton, Info) :-
+  augment(Original, Grammar),
+  write(Grammar), nl, nl,
+  createGraph(Grammar, graph(States, Transitions)),
+  write(States), nl, nl,
+  write(Transitions), nl, nl,
+  follow(Grammar, FollowSets),
+  write(FollowSets), nl, nl,
+  fold(reduceIter, (Grammar, FollowSets), [Transitions | States], Actions),
+  (findConflict(Actions, Info) ->
+    Automaton = null
+  ; Automaton = slr1(Actions),
+    Info = ok
+  ).
+% reduceIter(+(Grammar, FollowSets), +ActionsPart, +State, -Actions)
+reduceIter((Grammar, FollowSets), Acc, state(Kernel, SetId), Acc1) :-
+  closure(Grammar, Kernel, Closure),
+  fold(itemIter, (SetId, FollowSets), [Acc | Closure], Acc1).
+% itemIter(+(SetId, FollowSets), +Acc, +Item, -Acc1)
+itemIter((SetId, FollowSets), Acc, item(N, Rhs, Dot), Acc1) :-
+  length(Rhs, Dot),
+  member(follow(N, Follow), FollowSets),
+  fix(followIter, action(SetId, null, reduce(N, Rhs)), [Acc | Follow], Acc1).
+% followIter(+Action, +Acc, +Symbol, +Acc1)
+followIter(action(SetId, _, Reduction), Acc, Symbol, [X | Acc]) :-
+  Symbol \= nt('Z'),
+  X = action(SetId, Symbol, Reduction),
+  \+ member(X, Acc).
+% findConflict(+Transitions, -Info)
+findConflict(Transitions, konflikt(['conflicting actions: ', Act1, Act2])) :-
+  member(action(SrcId, Symbol, Act1), Transitions),
+  member(action(SrcId, Symbol, Act2), Transitions),
+  Act1 \= Act2.
+
+% augment(+Original, -Augmented)
+augment([prod(S, Rhs) | Rest], [prod('Z', [[nt(S), '#']]), prod(S, Rhs) | Rest]).
 
 % createGraph(+Grammar, -AutomatonGraph)
 createGraph(Grammar, Graph) :-
-  [prod(S, _) | _] = Grammar,
-  Initial = state([item('Z', [nt(S), '#'], 0)], 0),
+  [prod('Z', [Rhs]) | _] = Grammar,
+  Initial = state([item('Z', Rhs, 0)], 0),
   createGraph(Grammar, [Initial], graph([Initial], []), Graph).
 % createGraph(+Grammar, +TodoStates, +Acc, -Graph)
 createGraph(_, [], Graph, Graph).
@@ -199,6 +232,14 @@ fix(Fun, Config, [Acc , Elem | Rest], Result) :-
   (call(Fun, Config, Acc, Elem, Acc1) ->
     fix(Fun, Config, [Acc1 , Elem | Rest], Result)
   ; fix(Fun, Config, [Acc | Rest], Result)).
+
+% fold(:Predicate(+Config, +Accumulator, +Elem, -Result), +Config,
+%     +[Accumulator | List], -Result)
+fold(_, _, [Result], Result).
+fold(Fun, Config, [Acc , Elem | Rest], Result) :-
+  (call(Fun, Config, Acc, Elem, Acc1) ->
+    fold(Fun, Config, [Acc1 | Rest], Result)
+  ; fold(Fun, Config, [Acc | Rest], Result)).
 
 %% Official tests
 % test(+GrammarName, +WordList)
