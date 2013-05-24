@@ -95,7 +95,7 @@ createGraph(Grammar, [state(Kernel, Id) | Todo], Graph, Result) :-
 %     +(TodoStates, Graph))
 createTrans((SrcClosure, SrcId), (Todo, graph(States, Transitions)),
     Symbol, (Todo1, graph(States1, Transitions1))) :-
-  Symbol \= '#',
+  Symbol \= '#', % no transitions in graph needed
   transition(SrcClosure, Symbol, DstKernel),
   DstKernel \= [],
   (member(state(DstKernel, DstId), States) ->
@@ -113,14 +113,31 @@ createTrans((SrcClosure, SrcId), (Todo, graph(States, Transitions)),
   Transitions1 = [Trans | Transitions].
 
 % symbols(+Set, -Symbols) : DET
-symbols(Items, Symbols) :-
-  symbols(Items, [], Symbols).
+symbols(Set, Symbols) :-
+  symbols(Set, [], Symbols).
 % symbols(+Items, +Acc, -Symbols) : DET
 symbols([], Symbols, Symbols).
 symbols([item(N, NRhs, _) | Rest], Acc, Symbols) :-
   append([[nt(N) | NRhs], Acc], Temp1),
   remove_dups(Temp1, Acc1),
   symbols(Rest, Acc1, Symbols).
+symbols([prod(N, RhsList) | Rest], Acc, Symbols) :-
+  append([[nt(N)], Acc | RhsList], Temp1),
+  remove_dups(Temp1, Acc1),
+  symbols(Rest, Acc1, Symbols).
+
+% terminals(+Grammar, -Terminals) : DET
+terminals(Grammar, Terminals) :-
+  symbols(Grammar, Temp1),
+  exclude(nonterminal, Temp1, Terminals).
+
+% nonterminals(+Grammar, -Nonterminals) : DET
+nonterminals(Grammar, Nonterminals) :-
+  symbols(Grammar, Temp1),
+  include(nonterminal, Temp1, Nonterminals).
+
+% nonterminal(+Symbol) : PRED
+nonterminal(nt(_)).
 
 % transition(+SourceClosure, +Symbol, -DestinationKernel) : DET
 transition(Source, Symbol, Destination) :-
@@ -176,31 +193,33 @@ accept(slr1(Actions), [StateId | _], [A | _]) :-
   member(action(StateId, A, accept), Actions).
 accept(_, _, _) :- !, fail. % parser is deterministic
 
-% FIXME rewrite to fix/4 or similar mechanism
 % follow(+Grammar, -FollowSets)
 follow(Grammar, Set) :-
-  setof(follow(N, NSet), follow(Grammar, nt(N), NSet), Set). % FIXME
+  nonterminals(Grammar, Nonterminals),
+  follow([], Nonterminals, Grammar, [], Set).
+% follow(+Terminals, +Nonterminals, +Grammar, +Acc, -Result) : DET
+follow([], [], _, Result, Result).
+follow([], [nt(N) | Rest], Grammar, Acc, Result) :-
+  terminals(Grammar, Terminals),
+  follow(Terminals, Rest, Grammar, [follow(N, []) | Acc], Result).
+follow([T | TRest], NTerms, Grammar, [follow(N, Set) | AccRest], Result) :-
+  (followCheck(Grammar, nt(N), T, []) ->
+    Set1 = [T | Set]
+  ; Set1 = Set),
+  follow(TRest, NTerms, Grammar, [follow(N, Set1) | AccRest], Result).
 
-% follow(+Grammar, +Nonterminal, -FollowSet)
-follow(Grammar, nt(N), Set) :-
-  setof(X, follow(Grammar, nt(N), X, []), Set). % FIXME
-follow(Grammar, nt(N), []) :-
-  nonterminal(Grammar, nt(N)),
-  \+ follow(Grammar, nt(N), _, []).
-% follow(+Grammar, +Nonterminal, +Terminal, +Guard)
-follow(Grammar, nt(N), T, Guard) :-
-  terminal(Grammar, T),
+% followCheck(+Grammar, +Nonterminal, +Terminal, +Guard) : NDET
+followCheck(Grammar, nt(N), T, Guard) :-
   rule(Grammar, nt(_), Rhs, Id),
   \+ member(Id, Guard),
   append([_, [nt(N)], B], Rhs),
   first(Grammar, B, T).
-follow(Grammar, nt(N), T, Guard) :-
-  terminal(Grammar, T),
+followCheck(Grammar, nt(N), T, Guard) :-
   rule(Grammar, nt(X), Rhs, Id),
   \+ member(Id, Guard),
   append([_, [nt(N)], B], Rhs),
   nullable(Grammar, B),
-  follow(Grammar, nt(X), T, [Id | Guard]).
+  followCheck(Grammar, nt(X), T, [Id | Guard]).
 
 % first(+Grammar, +SententialForm, +Terminal)
 first(Grammar, Sentence, T) :-
@@ -239,20 +258,6 @@ rule([_ | Rest], nt(N), Rhs) :-
 % rule(+Grammar, +Nonterminal, -ProductionRhs, -Ident)
 rule(Grammar, nt(N), Rhs, ident(N, Rhs)) :-
   rule(Grammar, nt(N), Rhs).
-
-% nonterminal(+Grammar, +Nonterminal)
-nonterminal([prod(N, _) | _], nt(N)).
-nonterminal([_ | Rest], nt(N)) :-
-  nonterminal(Rest, nt(N)).
-
-% terminal(+Grammar, +Terminal)
-terminal([prod(_, RhsList) | _], T) :-
-  append(RhsList, All),
-  member(T, All),
-  T \= nt(_).
-terminal([_ | Rest], T) :-
-  terminal(Rest, T).
-% FIXME end
 
 %% Helpers
 % intersect(+List1, +List2) : PRED
