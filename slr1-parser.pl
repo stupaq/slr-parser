@@ -16,6 +16,10 @@
 
 :- use_module(library(lists)).
 
+% kernelItem(+Item) : PRED
+kernelItem(item('Z', _, _)).
+kernelItem(item(_, _, Dot)) :- Dot > 0.
+
 % printAutomaton(+Grammar, +States, +Actions) : PRED
 printAutomaton(_, [], []).
 printAutomaton(Grammar, [state(Kernel, Id) | _], _) :-
@@ -34,8 +38,11 @@ printAutomaton(Grammar, [], [_ | Trans]) :-
 createSLR1(Original, Automaton, Info) :-
   augment(Original, Grammar),
   createGraph(Grammar, graph(States, Transitions)),
+  convlist(acceptAction, States, Accepts),
   follow(Grammar, FollowSets),
-  fold(reduceIter, (Grammar, FollowSets), [Transitions | States], Actions),
+  fold(reduceIter, (Grammar, FollowSets), [[] | States], Reductions),
+  append([Transitions, Reductions, Accepts], Temp1),
+  remove_dups(Temp1, Actions),
   print(FollowSets), nl,
   printAutomaton(Grammar, States, Actions), nl,
   (findConflict(Actions, Info) ->
@@ -49,12 +56,12 @@ reduceIter((Grammar, FollowSets), Acc, state(Kernel, SetId), Acc1) :-
   fold(itemIter, (SetId, FollowSets), [Acc | Closure], Acc1).
 % itemIter(+(SetId, FollowSets), +Acc, +Item, -Acc1) : DET
 itemIter((SetId, FollowSets), Acc, item(N, Rhs, Dot), Acc1) :-
+  N \= 'Z',
   length(Rhs, Dot),
   member(follow(N, Follow), FollowSets),
   fold(followIter, action(SetId, null, reduce(N, Rhs)), [Acc | Follow], Acc1).
 % followIter(+Action, +Acc, +Symbol, +Acc1) : DET
 followIter(action(SetId, _, Reduction), Acc, Symbol, [X | Acc]) :-
-  Symbol \= nt('Z'),
   X = action(SetId, Symbol, Reduction),
   \+ member(X, Acc).
 % findConflict(+Transitions, -Info) : NDET
@@ -65,6 +72,11 @@ findConflict(Transitions, konflikt(['conflicting actions: ', Act1, Act2])) :-
 
 % augment(+Original, -Augmented) : DET
 augment([prod(S, Rhs) | Rest], [prod('Z', [[nt(S), '#']]), prod(S, Rhs) | Rest]).
+
+% acceptAction(+State, -Action) : DET
+acceptAction(state(Items, Id), action(Id, '#', accept)) :-
+  % item('Z', _, _) is always a kernel item
+  member(item('Z', _, 1), Items).
 
 % createGraph(+Grammar, -AutomatonGraph) : DET
 createGraph(Grammar, Graph) :-
@@ -83,6 +95,7 @@ createGraph(Grammar, [state(Kernel, Id) | Todo], Graph, Result) :-
 %     +(TodoStates, Graph))
 createTrans((SrcClosure, SrcId), (Todo, graph(States, Transitions)),
     Symbol, (Todo1, graph(States1, Transitions1))) :-
+  Symbol \= '#', % FIXME
   transition(SrcClosure, Symbol, DstKernel),
   DstKernel \= [],
   (member(state(DstKernel, DstId), States) ->
@@ -105,19 +118,25 @@ symbols(Items, Symbols) :-
 % symbols(+Items, +Acc, -Symbols) : DET
 symbols([], Symbols, Symbols).
 symbols([item(N, NRhs, _) | Rest], Acc, Symbols) :-
-  append([[nt(N) | NRhs], Acc], Temp),
-  remove_dups(Temp, Acc1),
+  append([[nt(N) | NRhs], Acc], Temp1),
+  remove_dups(Temp1, Acc1),
   symbols(Rest, Acc1, Symbols).
 
 % transition(+SourceClosure, +Symbol, -DestinationKernel) : DET
 transition(Source, Symbol, Destination) :-
-  fold(transitionIter, Symbol, [[] | Source], Destination).
+  fold(transitionIter, Symbol, [[] | Source], Kernel),
+  normKernel(Kernel, Destination).
 % transitionIter(+Symbol, +KernelPart, +Item, -KernelPart1) : DET
 transitionIter(Symbol, Acc, item(N, NRhs, NDot), [X | Acc]) :-
   append_length([Symbol | _], NRhs, NDot),
   XDot is NDot + 1,
   X = item(N, NRhs, XDot),
   \+ member(X, Acc).
+
+% normKernel(+ItemsSet, -NormalizedKernel) : DET
+normKernel(Set, Kernel) :-
+  sort(Set, Temp1), % FIXME
+  remove_dups(Temp1, Kernel).
 
 % closure(+Grammar, +Set, -SetClosure) : DET
 closure(Grammar, Set, Closure) :-
@@ -143,20 +162,19 @@ accept(Automaton, Word) :-
 % accept(+Automaton, +Stack, +Word)
 accept(slr1(Actions), Stack, [A | Rest]) :-
   [StateId | _] = Stack,
-  member(action(StateId, A, shift(DstId)), Actions),
-  accept(slr1(Actions), [(DstId, A) | Stack], Rest).
+  member(action(StateId, A, shift(DstId)), Actions), !, % no conflicts
+  accept(slr1(Actions), [DstId | Stack], Rest).
 accept(slr1(Actions), Stack, [A | Rest]) :-
   [StateId | _] = Stack,
-  member(action(StateId, A, reduce(N, Rhs)), Actions),
+  member(action(StateId, A, reduce(N, Rhs)), Actions), !, % no conflicts
   length(Rhs, RhsLen),
   append_length(Stack1, Stack, RhsLen),
   [TempId | _] = Stack1,
-  member(action(TempId, nt(N), goto(DstId)), Actions),
+  member(action(TempId, nt(N), goto(DstId)), Actions), !, % no conflicts
   accept(slr1(Actions), [DstId | Stack1], [A | Rest]).
-accept(slr1(Actions), [(StateId, _) | _], [A | _]) :-
+accept(slr1(Actions), [StateId | _], [A | _]) :-
   member(action(StateId, A, accept), Actions).
-% could not find an action, do not backtrack as this is deterministic
-accept(_, _, _) :- !, fail. % FIXME
+accept(_, _, _) :- !, fail. % parser is deterministic
 
 % FIXME rewrite to fix/4 or similar mechanism
 % follow(+Grammar, -FollowSets)
