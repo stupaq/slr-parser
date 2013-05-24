@@ -43,8 +43,8 @@ createSLR1(Original, Automaton, Info) :-
   fold(reduceIter, (Grammar, FollowSets), [[] | States], Reductions),
   append([Transitions, Reductions, Accepts], Temp1),
   remove_dups(Temp1, Actions),
-  print(FollowSets), nl,
-  printAutomaton(Grammar, States, Actions), nl,
+  print(FollowSets), nl, % DEBUG
+  printAutomaton(Grammar, States, Actions), nl, % DEBUG
   (findConflict(Actions, Info) ->
     Automaton = null
   ; Automaton = slr1(Actions),
@@ -95,7 +95,7 @@ createGraph(Grammar, [state(Kernel, Id) | Todo], Graph, Result) :-
 %     +(TodoStates, Graph))
 createTrans((SrcClosure, SrcId), (Todo, graph(States, Transitions)),
     Symbol, (Todo1, graph(States1, Transitions1))) :-
-  Symbol \= '#', % FIXME
+  Symbol \= '#',
   transition(SrcClosure, Symbol, DstKernel),
   DstKernel \= [],
   (member(state(DstKernel, DstId), States) ->
@@ -285,7 +285,8 @@ checkWords([S|RS], Automat) :-
     checkWords(RS, Automat).
 
 % LR(0)
-grammar(ex1, [prod('E', [[nt('E'), '+', nt('T')], [nt('T')]]), prod('T', [[id], ['(', nt('E'), ')']])]).
+grammar(ex1, [prod('E', [[nt('E'), '+', nt('T')], [nt('T')]]),
+  prod('T', [[id], ['(', nt('E'), ')']])]).
 % LR(0)
 grammar(ex2, [prod('A', [[nt('A'), x], [x]])]).
 % SLR(1)
@@ -293,6 +294,7 @@ grammar(ex3, [prod('A', [[x, nt('A')], [x]])]).
 % not SLR(1)
 grammar(ex4, [prod('A', [[x, nt('B')], [nt('B'), y], []]), prod('B', [[]])]).
 % not SLR(1)
-grammar(ex5, [prod('S', [[id], [nt('V'), ':=', nt('E')]]), prod('V', [[id], [id, '[', nt('E'), ']']]), prod('E', [[nt('V')]])]).
+grammar(ex5, [prod('S', [[id], [nt('V'), ':=', nt('E')]]),
+  prod('V', [[id], [id, '[', nt('E'), ']']]), prod('E', [[nt('V')]])]).
 % not SLR(1)
 grammar(ex6, [prod('A', [[x], [nt('B'), nt('B')]]), prod('B', [[x]])]).
