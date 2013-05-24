@@ -16,12 +16,20 @@
 
 :- use_module(library(lists)).
 
-% createSLR1(+Grammar, -Automaton, -Info)
+writeStates(_, []).
+writeStates(Grammar, [state(Kernel, Id) | _]) :-
+  closure(Grammar, Kernel, Closure),
+  write(state(Closure, Id)), nl,
+  fail.
+writeStates(Grammar, [_ | Rest]) :-
+  writeStates(Grammar, Rest).
+
+% createSLR1(+Grammar, -Automaton, -Info) : DET
 createSLR1(Original, Automaton, Info) :-
   augment(Original, Grammar),
   write(Grammar), nl, nl,
   createGraph(Grammar, graph(States, Transitions)),
-  write(States), nl, nl,
+  writeStates(Grammar, States), nl, nl,
   write(Transitions), nl, nl,
   follow(Grammar, FollowSets),
   write(FollowSets), nl, nl,
@@ -31,40 +39,41 @@ createSLR1(Original, Automaton, Info) :-
   ; Automaton = slr1(Actions),
     Info = ok
   ).
-% reduceIter(+(Grammar, FollowSets), +ActionsPart, +State, -Actions)
+% reduceIter(+(Grammar, FollowSets), +ActionsPart, +State, -Actions) : DET
 reduceIter((Grammar, FollowSets), Acc, state(Kernel, SetId), Acc1) :-
   closure(Grammar, Kernel, Closure),
   fold(itemIter, (SetId, FollowSets), [Acc | Closure], Acc1).
-% itemIter(+(SetId, FollowSets), +Acc, +Item, -Acc1)
+% itemIter(+(SetId, FollowSets), +Acc, +Item, -Acc1) : DET
 itemIter((SetId, FollowSets), Acc, item(N, Rhs, Dot), Acc1) :-
   length(Rhs, Dot),
   member(follow(N, Follow), FollowSets),
-  fix(followIter, action(SetId, null, reduce(N, Rhs)), [Acc | Follow], Acc1).
-% followIter(+Action, +Acc, +Symbol, +Acc1)
+  fold(followIter, action(SetId, null, reduce(N, Rhs)), [Acc | Follow], Acc1).
+% followIter(+Action, +Acc, +Symbol, +Acc1) : DET
 followIter(action(SetId, _, Reduction), Acc, Symbol, [X | Acc]) :-
   Symbol \= nt('Z'),
   X = action(SetId, Symbol, Reduction),
   \+ member(X, Acc).
-% findConflict(+Transitions, -Info)
+% findConflict(+Transitions, -Info) : NDET
 findConflict(Transitions, konflikt(['conflicting actions: ', Act1, Act2])) :-
   member(action(SrcId, Symbol, Act1), Transitions),
   member(action(SrcId, Symbol, Act2), Transitions),
   Act1 \= Act2.
 
-% augment(+Original, -Augmented)
+% augment(+Original, -Augmented) : DET
 augment([prod(S, Rhs) | Rest], [prod('Z', [[nt(S), '#']]), prod(S, Rhs) | Rest]).
 
-% createGraph(+Grammar, -AutomatonGraph)
+% createGraph(+Grammar, -AutomatonGraph) : DET
 createGraph(Grammar, Graph) :-
   [prod('Z', [Rhs]) | _] = Grammar,
-  Initial = state([item('Z', Rhs, 0)], 0),
+  Kernel = [item('Z', Rhs, 0)],
+  Initial = state(Kernel, 0),
   createGraph(Grammar, [Initial], graph([Initial], []), Graph).
-% createGraph(+Grammar, +TodoStates, +Acc, -Graph)
+% createGraph(+Grammar, +TodoStates, +Acc, -Graph) : DET
 createGraph(_, [], Graph, Graph).
 createGraph(Grammar, [state(Kernel, Id) | Todo], Graph, Result) :-
   closure(Grammar, Kernel, Closure),
   symbols(Closure, Symbols),
-  fix(createTrans, (Closure, Id), [(Todo, Graph) | Symbols], (Todo1, Graph1)),
+  fold(createTrans, (Closure, Id), [(Todo, Graph) | Symbols], (Todo1, Graph1)),
   createGraph(Grammar, Todo1, Graph1, Result).
 % createTrans(+(SrcClosure, SrcId), +(TodoStates, Graph), +Symbol,
 %     +(TodoStates, Graph))
@@ -86,33 +95,40 @@ createTrans((SrcClosure, SrcId), (Todo, graph(States, Transitions)),
   \+ member(Trans, Transitions),
   Transitions1 = [Trans | Transitions].
 
-% symbols(+Set, -Symbols)
+% symbols(+Set, -Symbols) : DET
 symbols(Items, Symbols) :-
   symbols(Items, [], Symbols).
-% symbols(+Items, +Acc, -Symbols)
+% symbols(+Items, +Acc, -Symbols) : DET
 symbols([], Symbols, Symbols).
 symbols([item(N, NRhs, _) | Rest], Acc, Symbols) :-
   append([[nt(N) | NRhs], Acc], Temp),
   remove_dups(Temp, Acc1),
   symbols(Rest, Acc1, Symbols).
 
-% transition(+SourceClosure, +Symbol, -DestinationKernel)
+% transition(+SourceClosure, +Symbol, -DestinationKernel) : DET
 transition(Source, Symbol, Destination) :-
-  fix(transitionIter, Symbol, [[] | Source], Destination).
-% transitionIter(+Symbol, +KernelPart, +Item, -KernelPart1)
+  fold(transitionIter, Symbol, [[] | Source], Destination).
+% transitionIter(+Symbol, +KernelPart, +Item, -KernelPart1) : DET
 transitionIter(Symbol, Acc, item(N, NRhs, NDot), [X | Acc]) :-
   append_length([Symbol | _], NRhs, NDot),
   XDot is NDot + 1,
   X = item(N, NRhs, XDot),
   \+ member(X, Acc).
 
-% closure(+Grammar, +Set, -SetClosure)
+% closure(+Grammar, +Set, -SetClosure) : DET
 closure(Grammar, Set, Closure) :-
-  fix(closureIter, Grammar, [Set | Set], Closure).
-% closureIter(+Grammar, +ClosurePart, +Item, -ClosurePart1)
+  closure(Set, Grammar, Set, Closure).
+% closure(+Todo, +Grammar, +Set, -SetClosure) : DET
+closure([], _, Closure, Closure).
+closure([Item | Todo], Grammar, Set, Closure) :-
+  (closureIter(Grammar, Set, Item, Set1) ->
+    closure([Item | Set1], Grammar, Set1, Closure)
+  ; closure(Todo, Grammar, Set, Closure)
+  ).
+% closureIter(+Grammar, +ClosurePart, +Item, -ClosurePart1) : NDET
 closureIter(Grammar, Acc, item(_, Rhs, Dot), [X | Acc]) :-
   append_length([nt(N) | _], Rhs, Dot),
-  rule(Grammar, nt(N), NRhs),
+  rule(Grammar, nt(N), NRhs), % NDET
   X = item(N, NRhs, 0),
   \+ member(X, Acc).
 
@@ -217,24 +233,13 @@ terminal([_ | Rest], T) :-
 % FIXME end
 
 %% Helpers
-% intersect(+List1, +List2)
+% intersect(+List1, +List2) : PRED
 intersect(List1, List2) :-
   member(X, List1),
   member(X, List2).
 
-% Predicate is a transformation parametrized by Elem, for each parameter from
-% the list the transformation is applied until first failure. Config is an
-% immutable configuration.
-% fix(:Predicate(+Config, +Accumulator, +Elem, -Result), +Config,
-%     +[Accumulator | List], -Result)
-fix(_, _, [Result], Result).
-fix(Fun, Config, [Acc , Elem | Rest], Result) :-
-  (call(Fun, Config, Acc, Elem, Acc1) ->
-    fix(Fun, Config, [Acc1 , Elem | Rest], Result)
-  ; fix(Fun, Config, [Acc | Rest], Result)).
-
 % fold(:Predicate(+Config, +Accumulator, +Elem, -Result), +Config,
-%     +[Accumulator | List], -Result)
+%     +[Accumulator | List], -Result) : DET
 fold(_, _, [Result], Result).
 fold(Fun, Config, [Acc , Elem | Rest], Result) :-
   (call(Fun, Config, Acc, Elem, Acc1) ->
