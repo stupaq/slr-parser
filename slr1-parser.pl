@@ -16,24 +16,28 @@
 
 :- use_module(library(lists)).
 
-writeStates(_, []).
-writeStates(Grammar, [state(Kernel, Id) | _]) :-
+% printAutomaton(+Grammar, +States, +Actions) : PRED
+printAutomaton(_, [], []).
+printAutomaton(Grammar, [state(Kernel, Id) | _], _) :-
   closure(Grammar, Kernel, Closure),
   write(state(Closure, Id)), nl,
   fail.
-writeStates(Grammar, [_ | Rest]) :-
-  writeStates(Grammar, Rest).
+printAutomaton(Grammar, [_ | Rest], Trans) :-
+  printAutomaton(Grammar, Rest, Trans).
+printAutomaton(_, [], [Trans | _]) :-
+  write(Trans), nl,
+  fail.
+printAutomaton(Grammar, [], [_ | Trans]) :-
+  printAutomaton(Grammar, [], Trans).
 
 % createSLR1(+Grammar, -Automaton, -Info) : DET
 createSLR1(Original, Automaton, Info) :-
   augment(Original, Grammar),
-  write(Grammar), nl, nl,
   createGraph(Grammar, graph(States, Transitions)),
-  writeStates(Grammar, States), nl, nl,
-  write(Transitions), nl, nl,
   follow(Grammar, FollowSets),
-  write(FollowSets), nl, nl,
   fold(reduceIter, (Grammar, FollowSets), [Transitions | States], Actions),
+  print(FollowSets), nl,
+  printAutomaton(Grammar, States, Actions), nl,
   (findConflict(Actions, Info) ->
     Automaton = null
   ; Automaton = slr1(Actions),
