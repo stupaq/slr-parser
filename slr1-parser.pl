@@ -43,8 +43,8 @@ createSLR1(Original, Automaton, Info) :-
   fold(reduceIter, (Grammar, FollowSets), [[] | States], Reductions),
   append([Transitions, Reductions, Accepts], Temp1),
   remove_dups(Temp1, Actions),
-  print(FollowSets), nl, % DEBUG
-  printAutomaton(Grammar, States, Actions), nl, % DEBUG
+  %print(FollowSets), nl, % DEBUG
+  %printAutomaton(Grammar, States, Actions), nl, % DEBUG
   (findConflict(Actions, Info) ->
     Automaton = null
   ; Automaton = slr1(Actions),
@@ -152,6 +152,8 @@ transitionIter(Symbol, Acc, item(N, NRhs, NDot), [X | Acc]) :-
 
 % normKernel(+ItemsSet, -NormalizedKernel) : DET
 normKernel(Set, Kernel) :-
+  % comparing sequences instead of sets may result in a bigger automaton, it
+  % will still correctly handle given grammar though
   sort(Set, Temp1), % FIXME
   remove_dups(Temp1, Kernel).
 
@@ -172,11 +174,11 @@ closureIter(Grammar, Acc, item(_, Rhs, Dot), [X | Acc]) :-
   X = item(N, NRhs, 0),
   \+ member(X, Acc).
 
-% accept(+Automaton, +Word)
+% accept(+Automaton, +Word) : DET
 accept(Automaton, Word) :-
   append([Word, ['#']], Word1),
   accept(Automaton, [0], Word1).
-% accept(+Automaton, +Stack, +Word)
+% accept(+Automaton, +Stack, +Word) : DET
 accept(slr1(Actions), Stack, [A | Rest]) :-
   [StateId | _] = Stack,
   member(action(StateId, A, shift(DstId)), Actions), !, % no conflicts
@@ -193,7 +195,7 @@ accept(slr1(Actions), [StateId | _], [A | _]) :-
   member(action(StateId, A, accept), Actions).
 accept(_, _, _) :- !, fail. % parser is deterministic
 
-% follow(+Grammar, -FollowSets)
+% follow(+Grammar, -FollowSets) : DET
 follow(Grammar, Set) :-
   nonterminals(Grammar, Nonterminals),
   follow([], Nonterminals, Grammar, [], Set).
@@ -221,10 +223,10 @@ followCheck(Grammar, nt(N), T, Guard) :-
   nullable(Grammar, B),
   followCheck(Grammar, nt(X), T, [Id | Guard]).
 
-% first(+Grammar, +SententialForm, +Terminal)
+% first(+Grammar, +SententialForm, +Terminal) : PRED
 first(Grammar, Sentence, T) :-
   first(Grammar, Sentence, T, []).
-% first(+Grammar, +SententialForm, +Terminal, +Guard)
+% first(+Grammar, +SententialForm, +Terminal, +Guard) : PRED
 first(_, [T | _], T, _).
 first(Grammar, [nt(N) | _], T, Guard) :-
   rule(Grammar, nt(N), Rhs, Id),
@@ -236,26 +238,26 @@ first(Grammar, Sentence, T, Guard) :-
   nullable(Grammar, A),
   first(Grammar, B, T, Guard).
 
-% nullable(+Grammar, +SententialForm)
+% nullable(+Grammar, +SententialForm) : PRED
 nullable(Grammar, Sentence) :-
   nullable(Grammar, Sentence, []).
-% nullable(+Grammar, +SententialForm, +Guard)
+% nullable(+Grammar, +SententialForm, +Guard) : PRED
 nullable(_, [], _).
 nullable(Grammar, [nt(N) | Rest], Guard) :-
   nullable(Grammar, nt(N), Guard),
   nullable(Grammar, Rest, Guard).
-% nullable(+Grammar, +Nonterminal, +Guard)
+% nullable(+Grammar, +Nonterminal, +Guard) : PRED
 nullable(Grammar, nt(N), Guard) :-
   rule(Grammar, nt(N), Rhs),
   \+ intersect(Rhs, [N | Guard]), % nullable(A) :- nullable(A), ...
   nullable(Grammar, Rhs, [N | Guard]).
 
-% rule(+Grammar, +Nonterminal, -ProductionRhs)
+% rule(+Grammar, +Nonterminal, -ProductionRhs) : PRED
 rule([prod(N, RhsList) | _], nt(N), Rhs) :-
   member(Rhs, RhsList).
 rule([_ | Rest], nt(N), Rhs) :-
   rule(Rest, nt(N), Rhs).
-% rule(+Grammar, +Nonterminal, -ProductionRhs, -Ident)
+% rule(+Grammar, +Nonterminal, -ProductionRhs, -Ident) : PRED
 rule(Grammar, nt(N), Rhs, ident(N, Rhs)) :-
   rule(Grammar, nt(N), Rhs).
 
