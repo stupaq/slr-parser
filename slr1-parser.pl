@@ -1,5 +1,7 @@
 % JPP; zadanie 3; Mateusz Machalica; 305678
 
+% FIXME reonsider closures/kernel, comment on it
+
 %% General notes
 % All predicates marked with DET are deterministic w.r.t. their ouptut
 % arguments even when all cuts are removed (therefore all cuts are green and
@@ -11,7 +13,8 @@
 % are guarded by green cuts (therefore the automaton will BOTH accept and
 % reject input in linear time).
 % As usage of red cuts is forbidden the only mean of determinization is
-% copy-pasting or usage of if-else constructs, the latter sounds a bit better.
+% copy-pasting or usage of if-else constructs, the latter sounds a bit better
+% (after http://sicstus.sics.se/sicstus/docs/3.7.1/html/sicstus_13.html).
 
 %% Algebraic types
 % prod(Nonterminal, RhsList)
@@ -52,7 +55,7 @@ createSLR1(Original, Automaton, Info) :-
   createGraph(Grammar, graph(States, Transitions)),
   convlist(acceptAction, States, Accepts),
   follow(Grammar, FollowSets),
-  fold(reduceIter, (Grammar, FollowSets), [[] | States], Reductions),
+  reductions(States, Grammar, FollowSets, [], Reductions),
   append([Transitions, Reductions, Accepts], Temp1),
   remove_dups(Temp1, Actions),
   %print(FollowSets), nl, % DEBUG
@@ -62,20 +65,26 @@ createSLR1(Original, Automaton, Info) :-
   ; Automaton = slr1(Actions),
     Info = ok
   ).
-% reduceIter(+(Grammar, FollowSets), +ActionsPart, +State, -Actions) : DET
-reduceIter((Grammar, FollowSets), Acc, state(Kernel, SetId), Acc1) :-
+% reductions(+TodoStates, +Grammar, +FollowSets, +Acc, -ReduceActions) : DET
+reductions([], _, _, Result, Result).
+reductions([state(Kernel, Id) | Todo], Grammar, FollowSets, Acc, Result) :-
   closure(Grammar, Kernel, Closure),
-  fold(itemIter, (SetId, FollowSets), [Acc | Closure], Acc1).
-% itemIter(+(SetId, FollowSets), +Acc, +Item, -Acc1) : DET
-itemIter((SetId, FollowSets), Acc, item(N, Rhs, Dot), Acc1) :-
-  N \= 'Z',
-  length(Rhs, Dot),
-  member(follow(N, Follow), FollowSets),
-  fold(followIter, action(SetId, null, reduce(N, Rhs)), [Acc | Follow], Acc1).
-% followIter(+Action, +Acc, +Symbol, +Acc1) : DET
-followIter(action(SetId, _, Reduction), Acc, Symbol, [X | Acc]) :-
-  X = action(SetId, Symbol, Reduction),
-  \+ member(X, Acc).
+  reductionsIter(Closure, Id, FollowSets, Acc, Acc1),
+  reductions(Todo, Grammar, FollowSets, Acc1, Result).
+% reductionsIter(+Closure, +SourceId, +FollowSets, +Acc, -Acc1) : DET
+reductionsIter([], _, _, Result, Result).
+reductionsIter([item(N, Rhs, Dot) | Rest], Id, FollowSets, Acc, Result) :-
+  (N \= 'Z', length(Rhs, Dot), member(follow(N, Follow), FollowSets) ->
+    reductionsFollow(Follow, Id, reduce(N, Rhs), Acc, Acc1)
+  ; Acc1 = Acc),
+  reductionsIter(Rest, Id, FollowSets, Acc1, Result).
+% reductionsFollow(+Follow, +SourceId, +Reduction, +Acc, -Acc1) : DET
+reductionsFollow([], _, _, Acc, Acc).
+reductionsFollow([Symbol | Rest], SourceId, Reduction, Acc, Result) :-
+  X = action(SourceId, Symbol, Reduction),
+  (member(X, Acc) -> Acc1 = Acc; Acc1 = [X | Acc]),
+  reductionsFollow(Rest, SourceId, Reduction, Acc1, Result).
+
 % findConflict(+Transitions, -Info) : NDET
 findConflict(Transitions, konflikt(['conflicting actions: ', Act1, Act2])) :-
   member(action(SrcId, Symbol, Act1), Transitions),
@@ -95,18 +104,21 @@ createGraph(Grammar, Graph) :-
   [prod('Z', [Rhs]) | _] = Grammar,
   Kernel = [item('Z', Rhs, 0)],
   Initial = state(Kernel, 0),
-  createGraph(Grammar, [Initial], graph([Initial], []), Graph).
-% createGraph(+Grammar, +TodoStates, +Acc, -Graph) : DET
-createGraph(_, [], Graph, Graph).
-createGraph(Grammar, [state(Kernel, Id) | Todo], Graph, Result) :-
+  createGraph([], [Initial], _, Grammar, graph([Initial], []), Graph).
+% createGraph(+TodoSymbols, +TodoStates, +State, +Grammar, +Acc, -Graph) : DET
+createGraph([], [], _, _, Graph, Graph).
+createGraph([], [state(Kernel, Id) | Todo], _, Grammar, Graph, Result) :-
   closure(Grammar, Kernel, Closure),
   symbols(Closure, Symbols),
-  fold(createTrans, (Closure, Id), [(Todo, Graph) | Symbols], (Todo1, Graph1)),
-  createGraph(Grammar, Todo1, Graph1, Result).
-% createTrans(+(SrcClosure, SrcId), +(TodoStates, Graph), +Symbol,
-%     +(TodoStates, Graph)) : DET
-createTrans((SrcClosure, SrcId), (Todo, graph(States, Transitions)),
-    Symbol, (Todo1, graph(States1, [Trans | Transitions]))) :-
+  createGraph(Symbols, Todo, state(Closure, Id), Grammar, Graph, Result).
+createGraph([Symbol | Rest], Todo, State, Grammar, Graph, Result) :-
+  (createTrans(State, Todo, Graph, Symbol, Todo1, Graph1) -> true
+  ; Todo1 = Todo, Graph1 = Graph),
+  createGraph(Rest, Todo1, State, Grammar, Graph1, Result).
+% createTrans(+ClosureState, +TodoStates, +Graph, +Symbol,
+%     -TodoStates1, -Graph1) : DET
+createTrans(state(SrcClosure, SrcId), Todo, graph(States, Transitions), Symbol,
+    Todo1, graph(States1, [Trans | Transitions])) :-
   % we do not use '#' transitions between states as there is no accepting state
   Symbol \= '#',
   transition(SrcClosure, Symbol, DstKernel),
@@ -151,10 +163,18 @@ nonterminal(nt(_)).
 
 % transition(+SourceClosure, +Symbol, -DestinationKernel) : DET
 transition(Source, Symbol, Destination) :-
-  fold(transitionIter, Symbol, [[] | Source], Kernel),
+  transition(Source, Symbol, [], Kernel),
   normKernel(Kernel, Destination).
-% transitionIter(+Symbol, +KernelPart, +Item, -KernelPart1) : DET
-transitionIter(Symbol, Acc, item(N, NRhs, NDot), [X | Acc]) :-
+% transition(+TodoItems, +Symbol, +Acc, -Result) : DET
+transition([], _, Result, Result).
+transition([Item | Rest], Symbol, Acc, Result) :-
+  transitionOne(Item, Symbol, Acc, NewItem),
+  transition(Rest, Symbol, [NewItem | Acc], Result).
+transition([Item | Rest], Symbol, Acc, Result) :-
+  \+ transitionOne(Item, Symbol, Acc, _),
+  transition(Rest, Symbol, Acc, Result).
+% transitionOne(+Item, +Symbol, +Acc, -ItemImage) : DET
+transitionOne(item(N, NRhs, NDot), Symbol, Acc, X) :-
   append_length([Symbol | _], NRhs, NDot),
   XDot is NDot + 1,
   X = item(N, NRhs, XDot),
@@ -205,6 +225,7 @@ accept(slr1(Actions), [StateId | _], [A | _]) :-
   member(action(StateId, A, accept), Actions).
 accept(_, _, _) :- !, fail. % parser is deterministic
 
+% FIXME force '#'
 % follow(+Grammar, -FollowSets) : DET
 follow(Grammar, Set) :-
   nonterminals(Grammar, Nonterminals),
@@ -276,14 +297,6 @@ rule(Grammar, nt(N), Rhs, ident(N, Rhs)) :-
 intersect(List1, List2) :-
   member(X, List1),
   member(X, List2).
-
-% fold(:Predicate(+Config, +Accumulator, +Elem, -Result), +Config,
-%     +[Accumulator | List], -Result) : DET
-fold(_, _, [Result], Result).
-fold(Fun, Config, [Acc , Elem | Rest], Result) :-
-  (call(Fun, Config, Acc, Elem, Acc1) ->
-    fold(Fun, Config, [Acc1 | Rest], Result)
-  ; fold(Fun, Config, [Acc | Rest], Result)).
 
 %% Official tests
 % test(+GrammarName, +WordList)
