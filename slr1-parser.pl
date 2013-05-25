@@ -1,6 +1,7 @@
 % JPP; zadanie 3; Mateusz Machalica; 305678
 
 % FIXME reonsider closures/kernel, comment on it
+% FIXME reconsider ifs
 
 %% General notes
 % All predicates marked with DET are deterministic w.r.t. their ouptut
@@ -225,7 +226,6 @@ accept(slr1(Actions), [StateId | _], [A | _]) :-
   member(action(StateId, A, accept), Actions).
 accept(_, _, _) :- !, fail. % parser is deterministic
 
-% FIXME force '#'
 % follow(+Grammar, -FollowSets) : DET
 follow(Grammar, Set) :-
   nonterminals(Grammar, Nonterminals),
@@ -233,15 +233,17 @@ follow(Grammar, Set) :-
 % follow(+Terminals, +Nonterminals, +Grammar, +Acc, -Result) : DET
 follow([], [], _, Result, Result).
 follow([], [nt(N) | Rest], Grammar, Acc, Result) :-
+  % according to definition from lecture slides
+  (Grammar = [prod(N, _) | _] -> Initial = ['#']; Initial = []),
   terminals(Grammar, Terminals),
-  follow(Terminals, Rest, Grammar, [follow(N, []) | Acc], Result).
+  follow(Terminals, Rest, Grammar, [follow(N, Initial) | Acc], Result).
 follow([T | TRest], NTerms, Grammar, [follow(N, Set) | AccRest], Result) :-
   (followCheck(Grammar, nt(N), T, []) ->
     Set1 = [T | Set]
   ; Set1 = Set),
   follow(TRest, NTerms, Grammar, [follow(N, Set1) | AccRest], Result).
 
-% followCheck(+Grammar, +Nonterminal, +Terminal, +Guard) : NDET
+% followCheck(+Grammar, +Nonterminal, +Terminal, +Guard) : PRED
 followCheck(Grammar, nt(N), T, Guard) :-
   rule(Grammar, nt(_), Rhs, Id),
   \+ member(Id, Guard),

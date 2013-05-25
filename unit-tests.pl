@@ -52,5 +52,19 @@ test(reject, forall(member((Name, Word), [
   (grammar(Name, Grammar); gr(Name, Grammar)),
   createSLR1(Grammar, Auto, ok),
   \+ accept(Auto, Word).
+test(follow, forall(member((Name, Follow), [
+      (ex1, [follow('E',['+',')','#']),follow('T',['+',')'])]),
+      (ex2, [follow('A',[x,'#'])]),
+      (ex3, [follow('A',['#'])]),
+      (ex4, [follow('A',['#']),follow('B',[y])]),
+      (ex5, [follow('S',['#']),follow('V',[']',':=']),follow('E',[']'])]),
+      (ex6, [follow('A',['#']),follow('B',[x])]),
+      (ex7, [follow('S',['#']),follow('A',[b]),follow('B',[b])]),
+      (ex8, [follow('S',['#']),follow('L',['=']),follow('R',['='])])
+    ]))) :-
+  (grammar(Name, Grammar); gr(Name, Grammar)),
+  follow(Grammar, Answer),
+  sort(Answer, Set),
+  sort(Follow, Set).
 
 :- end_tests(exported).
