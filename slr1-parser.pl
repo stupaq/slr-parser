@@ -1,5 +1,18 @@
 % JPP; zadanie 3; Mateusz Machalica; 305678
 
+%% General notes
+% All predicates marked with DET are deterministic w.r.t. their ouptut
+% arguments even when all cuts are removed (therefore all cuts are green and
+% SICSTUS can still make its optimization magic).
+% All predicates marked with NDET might be nondeterministic for some inputs,
+% they are always invoked until first failure to generate all possible
+% solutions.
+% Predicates which are deterministic and intended to be efficient (accept/2)
+% are guarded by green cuts (therefore the automaton will BOTH accept and
+% reject input in linear time).
+% As usage of red cuts is forbidden the only mean of determinization is
+% copy-pasting or usage of if-else constructs, the latter sounds a bit better.
+
 %% Algebraic types
 % prod(Nonterminal, RhsList)
 % item(ProductionNonterminal, ProductionRhs, DotPosition)
