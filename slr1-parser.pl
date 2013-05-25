@@ -7,9 +7,8 @@
 % state(ItemsSetKernel, StateId)
 % graph(States, Transitions)
 % slr1(Actions)
-% action(SourceId, Symbol, ShiftOrReduceOrGoto)
-% shift(StateId)
-% goto(StateId)
+% action(SourceId, Symbol, ShiftGotoOrReduce)
+% shiftgoto(StateId) % whether this is shift/goto is determined by a Symbol
 % reduce(Nonterminal, ProductionRhs)
 % accept
 % follow(Nonterminal, TerminalsSet)
@@ -92,25 +91,23 @@ createGraph(Grammar, [state(Kernel, Id) | Todo], Graph, Result) :-
   fold(createTrans, (Closure, Id), [(Todo, Graph) | Symbols], (Todo1, Graph1)),
   createGraph(Grammar, Todo1, Graph1, Result).
 % createTrans(+(SrcClosure, SrcId), +(TodoStates, Graph), +Symbol,
-%     +(TodoStates, Graph))
+%     +(TodoStates, Graph)) : DET
 createTrans((SrcClosure, SrcId), (Todo, graph(States, Transitions)),
-    Symbol, (Todo1, graph(States1, Transitions1))) :-
-  Symbol \= '#', % no transitions in graph needed
+    Symbol, (Todo1, graph(States1, [Trans | Transitions]))) :-
+  % we do not use '#' transitions between states as there is no accepting state
+  Symbol \= '#',
   transition(SrcClosure, Symbol, DstKernel),
   DstKernel \= [],
+  Trans = action(SrcId, Symbol, shiftgoto(DstId)),
+  % if we have this transition then have destination state too
+  \+ member(Trans, Transitions),
   (member(state(DstKernel, DstId), States) ->
     Todo1 = Todo,
     States1 = States
   ; length(States, DstId),
     Todo1 = [state(DstKernel, DstId) | Todo],
     States1 = [state(DstKernel, DstId) | States]
-  ),
-  (Symbol = nt(_) ->
-    Trans = action(SrcId, Symbol, goto(DstId))
-  ; Trans = action(SrcId, Symbol, shift(DstId))
-  ),
-  \+ member(Trans, Transitions),
-  Transitions1 = [Trans | Transitions].
+  ).
 
 % symbols(+Set, -Symbols) : DET
 symbols(Set, Symbols) :-
@@ -181,7 +178,7 @@ accept(Automaton, Word) :-
 % accept(+Automaton, +Stack, +Word) : DET
 accept(slr1(Actions), Stack, [A | Rest]) :-
   [StateId | _] = Stack,
-  member(action(StateId, A, shift(DstId)), Actions), !, % no conflicts
+  member(action(StateId, A, shiftgoto(DstId)), Actions), !, % no conflicts
   accept(slr1(Actions), [DstId | Stack], Rest).
 accept(slr1(Actions), Stack, [A | Rest]) :-
   [StateId | _] = Stack,
@@ -189,7 +186,7 @@ accept(slr1(Actions), Stack, [A | Rest]) :-
   length(Rhs, RhsLen),
   append_length(Stack1, Stack, RhsLen),
   [TempId | _] = Stack1,
-  member(action(TempId, nt(N), goto(DstId)), Actions), !, % no conflicts
+  member(action(TempId, nt(N), shiftgoto(DstId)), Actions), !, % no conflicts
   accept(slr1(Actions), [DstId | Stack1], [A | Rest]).
 accept(slr1(Actions), [StateId | _], [A | _]) :-
   member(action(StateId, A, accept), Actions).
