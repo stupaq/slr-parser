@@ -45,7 +45,7 @@ printAutomaton(_, [], [Trans | _]) :-
 printAutomaton(Grammar, [], [_ | Trans]) :-
   printAutomaton(Grammar, [], Trans).
 
-% createSLR1(+Grammar, -Automaton, -Info) : DET
+% createSLR1(+Grammar, -Automaton, -Info) : DET if ok, NDET if konflikt(_)
 createSLR1(Original, Automaton, Info) :-
   augment(Original, Grammar),
   createGraph(Grammar, graph(States, Transitions)),
@@ -56,11 +56,8 @@ createSLR1(Original, Automaton, Info) :-
   remove_dups(Temp1, Actions),
   %print(FollowSets), nl, % DEBUG
   %printAutomaton(Grammar, States, Actions), nl, % DEBUG
-  (findConflict(Actions, Info) ->
-    Automaton = null
-  ; Automaton = slr1(Actions),
-    Info = ok
-  ).
+  findConflict(Actions, Info),
+  (Info = ok -> Automaton = slr1(Actions); Automaton = null).
 % reductions(+TodoStates, +Grammar, +FollowSets, +Acc, -ReduceActions) : DET
 reductions([], _, _, Result, Result).
 reductions([state(Kernel, Id) | Todo], Grammar, FollowSets, Acc, Result) :-
@@ -83,10 +80,12 @@ reductionsFollow([Symbol | Rest], SourceId, Reduction, Acc, Result) :-
   reductionsFollow(Rest, SourceId, Reduction, Acc1, Result).
 
 % findConflict(+Transitions, -Info) : NDET
-findConflict(Transitions, konflikt(['conflicting actions: ', Act1, Act2])) :-
+findConflict(Transitions, konflikt(('conflicting actions: ', Act1, Act2))) :-
   member(action(SrcId, Symbol, Act1), Transitions),
   member(action(SrcId, Symbol, Act2), Transitions),
   Act1 \= Act2.
+findConflict(Transitions, ok) :-
+  \+ findConflict(Transitions, konflikt(_)).
 
 % augment(+Original, -Augmented) : DET
 augment([prod(S, Rhs) | Rest], [prod('Z', [[nt(S), '#']]), prod(S, Rhs) | Rest]).
@@ -124,7 +123,7 @@ createTrans(state(SrcClosure, SrcId), Todo, graph(States, Transitions), Symbol,
   Trans = action(SrcId, Symbol, shiftgoto(DstId)),
   % if we have this transition then have destination state too
   \+ member(Trans, Transitions),
-  (findState(state(DstKernel, DstId), States) ->
+  (findState(state(DstKernel, DstId), States) -> % DET at most one match
     Todo1 = Todo,
     States1 = States
   ; length(States, DstId),
