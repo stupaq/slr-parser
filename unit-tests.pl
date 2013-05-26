@@ -5,6 +5,7 @@ gr(ex7, [prod('S', [[nt('A')], [x,b]]), prod('A', [[a, nt('A'), b], [nt('B')]]),
   prod('B', [[y]])]).
 gr(ex8, [prod('S', [[nt('L'), '=', nt('R')], [nt('R')]]),
   prod('L', [['*', nt('R')], [a]]), prod('R', [[nt('L')]])]).
+gr(fl1, [prod('A', [[nt('B'),x]]), prod('B', [[]])]).
 
 :- begin_tests(exported).
 
@@ -53,14 +54,15 @@ test(reject, forall(member((Name, Word), [
   createSLR1(Grammar, Auto, ok),
   \+ accept(Auto, Word).
 test(follow, forall(member((Name, Follow), [
-      (ex1, [follow('E',['+',')','#']),follow('T',['+',')'])]),
+      (ex1, [follow('E',['+',')','#']),follow('T',['+',')','#'])]),
       (ex2, [follow('A',[x,'#'])]),
       (ex3, [follow('A',['#'])]),
-      (ex4, [follow('A',['#']),follow('B',[y])]),
-      (ex5, [follow('S',['#']),follow('V',[']',':=']),follow('E',[']'])]),
-      (ex6, [follow('A',['#']),follow('B',[x])]),
-      (ex7, [follow('S',['#']),follow('A',[b]),follow('B',[b])]),
-      (ex8, [follow('S',['#']),follow('L',['=']),follow('R',['='])])
+      (ex4, [follow('A',['#']),follow('B',[y,'#'])]),
+      (ex5, [follow('S',['#']),follow('V',[']',':=','#']),follow('E',[']','#'])]),
+      (ex6, [follow('A',['#']),follow('B',[x,'#'])]),
+      (ex7, [follow('S',['#']),follow('A',[b,'#']),follow('B',[b,'#'])]),
+      (ex8, [follow('S',['#']),follow('L',['=','#']),follow('R',['=','#'])]),
+      (fl1, [follow('A',['#']),follow('B',[x])])
     ]))) :-
   (grammar(Name, Grammar); gr(Name, Grammar)),
   follow(Grammar, Answer),

@@ -1,18 +1,14 @@
 % JPP; zadanie 3; Mateusz Machalica; 305678
 
-% FIXME reconsider ifs
-
 %% General notes
 % All predicates marked with DET are deterministic w.r.t. their ouptut
 % arguments even when all cuts are removed (therefore all cuts are green and
-% SICSTUS can still make its optimization magic).
-% All predicates marked with NDET might be nondeterministic for some inputs,
-% they are always invoked until first failure to generate all possible
-% solutions.
+% SICSTUS can still make its last call optimization).
+% All predicates marked with NDET might be nondeterministic for some inputs.
 % Predicates which are deterministic and intended to be efficient (accept/2)
-% are guarded by green cuts (therefore the automaton will BOTH accept and
-% reject input in linear time).
-% As usage of red cuts is forbidden the only mean of determinization is
+% are guarded by green cuts (therefore the automaton will BOTH accept AND
+% reject input without backtracking).
+% As usage of red cuts is forbidden the only means of determinization are
 % copy-pasting or usage of if-else constructs, the latter sounds a bit better
 % (after http://sicstus.sics.se/sicstus/docs/3.7.1/html/sicstus_13.html).
 
@@ -54,7 +50,7 @@ createSLR1(Original, Automaton, Info) :-
   augment(Original, Grammar),
   createGraph(Grammar, graph(States, Transitions)),
   convlist(acceptAction, States, Accepts),
-  follow(Grammar, FollowSets),
+  follow(Original, FollowSets),
   reductions(States, Grammar, FollowSets, [], Reductions),
   append([Transitions, Reductions, Accepts], Temp1),
   remove_dups(Temp1, Actions),
@@ -74,7 +70,8 @@ reductions([state(Kernel, Id) | Todo], Grammar, FollowSets, Acc, Result) :-
 % reductionsIter(+Closure, +SourceId, +FollowSets, +Acc, -Acc1) : DET
 reductionsIter([], _, _, Result, Result).
 reductionsIter([item(N, Rhs, Dot) | Rest], Id, FollowSets, Acc, Result) :-
-  (N \= 'Z', length(Rhs, Dot), member(follow(N, Follow), FollowSets) ->
+  (N \= 'Z', length(Rhs, Dot) ->
+    member(follow(N, Follow), FollowSets),
     reductionsFollow(Follow, Id, reduce(N, Rhs), Acc, Acc1)
   ; Acc1 = Acc),
   reductionsIter(Rest, Id, FollowSets, Acc1, Result).
@@ -198,12 +195,11 @@ closure(Grammar, Set, Closure) :-
 % closure(+Todo, +Grammar, +Set, -SetClosure) : DET
 closure([], _, Closure, Closure).
 closure([Item | Todo], Grammar, Set, Closure) :-
-  (closureIter(Grammar, Set, Item, Set1) ->
-    closure([Item | Set1], Grammar, Set1, Closure)
-  ; closure(Todo, Grammar, Set, Closure)
-  ).
-% closureIter(+Grammar, +ClosurePart, +Item, -ClosurePart1) : NDET
-closureIter(Grammar, Acc, item(_, Rhs, Dot), [X | Acc]) :-
+  (closureIter(Grammar, Set, Item, NewItem) ->
+    closure([Item, NewItem | Todo], Grammar, [NewItem | Set], Closure)
+  ; closure(Todo, Grammar, Set, Closure)).
+% closureIter(+Grammar, +ClosurePart, +Item, -NewItem) : NDET
+closureIter(Grammar, Acc, item(_, Rhs, Dot), X) :-
   append_length([nt(N) | _], Rhs, Dot),
   rule(Grammar, nt(N), NRhs), % NDET
   X = item(N, NRhs, 0),
@@ -231,21 +227,30 @@ accept(slr1(Actions), [StateId | _], [A | _]) :-
 accept(_, _, _) :- !, fail. % parser is deterministic
 
 % follow(+Grammar, -FollowSets) : DET
-follow(Grammar, Set) :-
+follow(Original, Set) :-
+  augment(Original, Grammar),
   nonterminals(Grammar, Nonterminals),
-  follow([], Nonterminals, Grammar, [], Set).
+  follow([], Nonterminals, Grammar, [], Temp),
+  deaugment(Temp, [], Set).
 % follow(+Terminals, +Nonterminals, +Grammar, +Acc, -Result) : DET
 follow([], [], _, Result, Result).
 follow([], [nt(N) | Rest], Grammar, Acc, Result) :-
-  % according to definition from lecture slides
-  (Grammar = [prod(N, _) | _] -> Initial = ['#']; Initial = []),
   terminals(Grammar, Terminals),
-  follow(Terminals, Rest, Grammar, [follow(N, Initial) | Acc], Result).
+  follow(Terminals, Rest, Grammar, [follow(N, []) | Acc], Result).
 follow([T | TRest], NTerms, Grammar, [follow(N, Set) | AccRest], Result) :-
   (followCheck(Grammar, nt(N), T, []) ->
     Set1 = [T | Set]
   ; Set1 = Set),
   follow(TRest, NTerms, Grammar, [follow(N, Set1) | AccRest], Result).
+
+% deaugment(+AugmentedFollow, +Acc, -FollowSet) : DET
+deaugment([], Result, Result).
+deaugment([follow('Z', _) | Rest], Acc, Result) :-
+  !, % green, clauses are disjoint
+  deaugment(Rest, Acc, Result).
+deaugment([Follow | Rest], Acc, Result) :-
+  follow('Z', _) \= Follow,
+  deaugment(Rest, [Follow | Acc], Result).
 
 % followCheck(+Grammar, +Nonterminal, +Terminal, +Guard) : PRED
 followCheck(Grammar, nt(N), T, Guard) :-
