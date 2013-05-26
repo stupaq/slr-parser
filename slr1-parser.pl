@@ -1,6 +1,5 @@
 % JPP; zadanie 3; Mateusz Machalica; 305678
 
-% FIXME reonsider closures/kernel, comment on it
 % FIXME reconsider ifs
 
 %% General notes
@@ -106,7 +105,8 @@ createGraph(Grammar, Graph) :-
   Kernel = [item('Z', Rhs, 0)],
   Initial = state(Kernel, 0),
   createGraph([], [Initial], _, Grammar, graph([Initial], []), Graph).
-% createGraph(+TodoSymbols, +TodoStates, +State, +Grammar, +Acc, -Graph) : DET
+% createGraph(+TodoSymbols, +TodoStates, +StateClosure, +Grammar, +Acc,
+%     -Graph) : DET
 createGraph([], [], _, _, Graph, Graph).
 createGraph([], [state(Kernel, Id) | Todo], _, Grammar, Graph, Result) :-
   closure(Grammar, Kernel, Closure),
@@ -127,13 +127,19 @@ createTrans(state(SrcClosure, SrcId), Todo, graph(States, Transitions), Symbol,
   Trans = action(SrcId, Symbol, shiftgoto(DstId)),
   % if we have this transition then have destination state too
   \+ member(Trans, Transitions),
-  (member(state(DstKernel, DstId), States) ->
+  (findState(state(DstKernel, DstId), States) ->
     Todo1 = Todo,
     States1 = States
   ; length(States, DstId),
     Todo1 = [state(DstKernel, DstId) | Todo],
     States1 = [state(DstKernel, DstId) | States]
   ).
+
+% findState(?State, +States) : NDET
+findState(state(Kernel, Id), [state(Kernel1, Id) | _]) :-
+  setEqual(Kernel, Kernel1).
+findState(State, [_ | Rest]) :-
+  findState(State, Rest).
 
 % symbols(+Set, -Symbols) : DET
 symbols(Set, Symbols) :-
@@ -183,10 +189,8 @@ transitionOne(item(N, NRhs, NDot), Symbol, Acc, X) :-
 
 % normKernel(+ItemsSet, -NormalizedKernel) : DET
 normKernel(Set, Kernel) :-
-  % comparing sequences instead of sets may result in a bigger automaton, it
-  % will still correctly handle given grammar though
-  sort(Set, Temp1), % FIXME
-  remove_dups(Temp1, Kernel).
+  %sort(Set, Temp1), % this is not allowed according to problem statement
+  remove_dups(Set, Kernel).
 
 % closure(+Grammar, +Set, -SetClosure) : DET
 closure(Grammar, Set, Closure) :-
@@ -285,12 +289,12 @@ nullable(Grammar, nt(N), Guard) :-
   \+ intersect(Rhs, [N | Guard]), % nullable(A) :- nullable(A), ...
   nullable(Grammar, Rhs, [N | Guard]).
 
-% rule(+Grammar, +Nonterminal, -ProductionRhs) : PRED
+% rule(+Grammar, +Nonterminal, -ProductionRhs) : NDET
 rule([prod(N, RhsList) | _], nt(N), Rhs) :-
   member(Rhs, RhsList).
 rule([_ | Rest], nt(N), Rhs) :-
   rule(Rest, nt(N), Rhs).
-% rule(+Grammar, +Nonterminal, -ProductionRhs, -Ident) : PRED
+% rule(+Grammar, +Nonterminal, -ProductionRhs, -Ident) : NDET
 rule(Grammar, nt(N), Rhs, ident(N, Rhs)) :-
   rule(Grammar, nt(N), Rhs).
 
@@ -299,6 +303,17 @@ rule(Grammar, nt(N), Rhs, ident(N, Rhs)) :-
 intersect(List1, List2) :-
   member(X, List1),
   member(X, List2).
+
+% subset(+Subset, +Superset) : PRED
+subset([], _).
+subset([X | Set1], Set2) :-
+  member(X, Set2),
+  subset(Set1, Set2).
+
+% setEqual(+Set1, +Set2) : PRED
+setEqual(Set1, Set2) :-
+  subset(Set1, Set2),
+  subset(Set2, Set1).
 
 %% Official tests
 % test(+GrammarName, +WordList)
