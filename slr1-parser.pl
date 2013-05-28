@@ -288,10 +288,11 @@ nullable(Grammar, [nt(N) | Rest], Guard) :-
   nullable(Grammar, nt(N), Guard),
   nullable(Grammar, Rest, Guard).
 % nullable(+Grammar, +Nonterminal, +Guard) : PRED
-nullable(Grammar, nt(N), Guard) :-
+nullable(Grammar, nt(N), OldGuard) :-
   rule(Grammar, nt(N), Rhs),
-  \+ intersect(Rhs, [N | Guard]), % nullable(A) :- nullable(A), ...
-  nullable(Grammar, Rhs, [N | Guard]).
+  Guard = [nt(N) | OldGuard],
+  \+ intersect(Rhs, Guard), % nullable(A) :- nullable(A), ...
+  nullable(Grammar, Rhs, Guard).
 
 % rule(+Grammar, +Nonterminal, -ProductionRhs) : NDET
 rule([prod(N, RhsList) | _], nt(N), Rhs) :-

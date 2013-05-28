@@ -38,6 +38,8 @@ grammar(ex7, [prod('S', [[nt('A')], [x,b]]), prod('A', [[a, nt('A'), b], [nt('B'
 grammar(ex8, [prod('S', [[nt('L'), '=', nt('R')], [nt('R')]]),
   prod('L', [['*', nt('R')], [a]]), prod('R', [[nt('L')]])]).
 grammar(fl1, [prod('A', [[nt('B'),x]]), prod('B', [[]])]).
+grammar(fl2, [prod('A', [[nt('A'), nt('B')], [a]]),
+  prod('B', [[], [nt('B'), nt('B'), nt('B'), nt('B'), nt('B'), b]])]).
 
 :- begin_tests(exported).
 
@@ -94,7 +96,8 @@ test(follow, forall(member((Name, Follow), [
       (ex6, [follow('A',['#']),follow('B',[x,'#'])]),
       (ex7, [follow('S',['#']),follow('A',[b,'#']),follow('B',[b,'#'])]),
       (ex8, [follow('S',['#']),follow('L',['=','#']),follow('R',['=','#'])]),
-      (fl1, [follow('A',['#']),follow('B',[x])])
+      (fl1, [follow('A',['#']),follow('B',[x])]),
+      (fl2, [follow('A',[b,'#']),follow('B',[b,'#'])])
     ]))) :-
   grammar(Name, Grammar),
   follow(Grammar, Answer),
