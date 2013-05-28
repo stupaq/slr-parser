@@ -33,10 +33,17 @@ grammar(ex5, [prod('S', [[id], [nt('V'), ':=', nt('E')]]),
 
 %% My tests
 grammar(ex6, [prod('A', [[x], [nt('B'), nt('B')]]), prod('B', [[x]])]).
-grammar(ex7, [prod('S', [[nt('A')], [x,b]]), prod('A', [[a, nt('A'), b], [nt('B')]]),
-  prod('B', [[y]])]).
+grammar(ex7, [prod('S', [[nt('A')], [x,b]]), prod('A', [[a, nt('A'), b],
+  [nt('B')]]), prod('B', [[y]])]).
 grammar(ex8, [prod('S', [[nt('L'), '=', nt('R')], [nt('R')]]),
   prod('L', [['*', nt('R')], [a]]), prod('R', [[nt('L')]])]).
+grammar(ex9, [prod('X', [[nt('X')]])]).
+grammar(ex10, [prod('S', [[nt('C'), nt('B'), nt('A'), nt('B'), nt('C')]]),
+  prod('A', [[nt('A'), a, nt('A')], [a, a], []]), prod('B', [[b, nt('B')],
+  []]), prod('C', [[c, nt('C')], []])]).
+grammar(ex11,
+  [prod('F',[[nt('C'),nt('F'),nt('F'),nt('F')],[]]),prod('C',[[]])]).
+
 grammar(fl1, [prod('A', [[nt('B'),x]]), prod('B', [[]])]).
 grammar(fl2, [prod('A', [[nt('A'), nt('B')], [a]]),
   prod('B', [[], [nt('B'), nt('B'), nt('B'), nt('B'), nt('B'), b]])]).
@@ -47,7 +54,7 @@ test(success, forall(member(Name, [ex1,ex2,ex3,ex7]))) :-
   grammar(Name, Grammar),
   createSLR1(Grammar, Auto, ok),
   Auto = slr1([_ | _]).
-test(conflict, forall(member(Name, [ex4,ex5,ex6,ex8]))) :-
+test(conflict, forall(member(Name, [ex4,ex5,ex6,ex8,ex9,ex10]))) :-
   grammar(Name, Grammar),
   createSLR1(Grammar, Auto, konflikt(_)),
   Auto = null.
@@ -105,3 +112,13 @@ test(follow, forall(member((Name, Follow), [
   sort(Follow, Set).
 
 :- end_tests(exported).
+
+:- begin_tests(various).
+
+test(nullable, forall(member((Name, Word), [
+      (ex11, [nt('F'), nt('F'), nt('F')])
+    ]))) :-
+  grammar(Name, Grammar),
+  nullable(Grammar, Word).
+
+:- end_tests(various).

@@ -45,6 +45,12 @@ printAutomaton(_, [], [Trans | _]) :-
 printAutomaton(Grammar, [], [_ | Trans]) :-
   printAutomaton(Grammar, [], Trans).
 
+% createSLR1det(+Grammar, -Automaton, -Info) : DET
+% for compatibility reasons, this will work like createSLR1/3 but returns only
+% the first conflict when grammar is not SLR1
+%createSLR1det(Grammar,Automaton, Info) :-
+%  createSLR1(Grammar, Automaton, Info), !.
+
 % createSLR1(+Grammar, -Automaton, -Info) : DET if ok, NDET if konflikt(_)
 createSLR1(Original, Automaton, Info) :-
   augment(Original, Grammar),
@@ -56,7 +62,7 @@ createSLR1(Original, Automaton, Info) :-
   remove_dups(Temp1, Actions),
   %print(FollowSets), nl, % DEBUG
   %printAutomaton(Grammar, States, Actions), nl, % DEBUG
-  findConflict(Actions, Info),
+  findConflict(Actions, Info), % NDET
   (Info = ok -> Automaton = slr1(Actions); Automaton = null).
 % reductions(+TodoStates, +Grammar, +FollowSets, +Acc, -ReduceActions) : DET
 reductions([], _, _, Result, Result).
