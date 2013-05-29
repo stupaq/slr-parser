@@ -257,6 +257,9 @@ deaugment([Follow | Rest], Acc, Result) :-
   follow('Z', _) \= Follow,
   deaugment(Rest, [Follow | Acc], Result).
 
+% We can pass around an accumulator and construct entire set at once (as in
+% many predicates before), the problem is that it is not necessarily faster
+% (see Visited manipulations) and way less legible.
 % followCheck(+Grammar, +Nonterminal, +Terminal) : PRED
 followCheck(Grammar, nt(N), Terminal) :-
   followCheck(Grammar, nt(N), [nt(N)], Grammar, Terminal).
@@ -266,24 +269,19 @@ followCheck([prod(_, []) | Rest], nt(N), Visited, Original, T) :-
 followCheck([prod(X, [[] | ProdRest]) | Rest], nt(N), Visited, Original, T) :-
   followCheck([prod(X, ProdRest) | Rest], nt(N), Visited, Original, T).
 followCheck([prod(X, [[W | RhsRest] | ProdRest]) | Rest], nt(N), Visited, Original, T) :-
-  (W \= nt(N) ->
-    Visited1 = Visited,
-    Ok = nope
-  ; (first(Original, RhsRest, T) ->
-      Ok = ok
-    ; (\+ member(nt(X), Visited), nullable(Original, RhsRest) ->
-        (followCheck(Original, nt(X), [nt(X) | Visited], Original, T) ->
-          Ok = ok
-        ; Visited1 = [nt(X) | Visited],
-          Ok = nope
-        )
-      ; Visited1 = Visited,
-        Ok = nope
+  W \= nt(N),
+  followCheck([prod(X, [RhsRest | ProdRest]) | Rest], nt(N), Visited, Original, T).
+followCheck([prod(X, [[nt(N) | RhsRest] | ProdRest]) | Rest], nt(N), Visited, Original, T) :-
+  Todo = [prod(X, [RhsRest | ProdRest]) | Rest],
+  (first(Original, RhsRest, T) -> true
+  ; (\+ member(nt(X), Visited), nullable(Original, RhsRest) ->
+      (followCheck(Original, nt(X), [nt(X) | Visited], Original, T) -> true
+      ; % we know that there is no point in calling followCheck for X and T
+        followCheck(Todo, nt(N), [nt(X) | Visited], Original, T)
       )
+    ; followCheck(Todo, nt(N), Visited, Original, T)
     )
-  ),
-  (Ok = ok -> true
-  ; followCheck([prod(X, [RhsRest | ProdRest]) | Rest], nt(N), Visited1, Original, T)).
+  ).
 
 % first(+Grammar, +SententialForm, +Terminal) : PRED
 first(Grammar, Sentence, T) :-
