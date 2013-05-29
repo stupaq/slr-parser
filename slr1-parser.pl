@@ -49,7 +49,7 @@ printAutomaton(Grammar, [], [_ | Trans]) :-
 % for compatibility reasons, this will work like createSLR1/3 but returns only
 % the first conflict when grammar is not SLR1
 %createSLR1det(Grammar,Automaton, Info) :-
-%  createSLR1(Grammar, Automaton, Info), !.
+%  createSLR1(Grammar, Automaton, Info), !. % red cut, this is a dead code
 
 % createSLR1(+Grammar, -Automaton, -Info) : DET if ok, NDET if konflikt(_)
 createSLR1(Original, Automaton, Info) :-
@@ -243,7 +243,7 @@ follow([], [nt(N) | Rest], Grammar, Acc, Result) :-
   terminals(Grammar, Terminals),
   follow(Terminals, Rest, Grammar, [follow(N, []) | Acc], Result).
 follow([T | TRest], NTerms, Grammar, [follow(N, Set) | AccRest], Result) :-
-  (followCheck(Grammar, nt(N), T, []) ->
+  (followCheck(Grammar, nt(N), T) ->
     Set1 = [T | Set]
   ; Set1 = Set),
   follow(TRest, NTerms, Grammar, [follow(N, Set1) | AccRest], Result).
@@ -257,18 +257,25 @@ deaugment([Follow | Rest], Acc, Result) :-
   follow('Z', _) \= Follow,
   deaugment(Rest, [Follow | Acc], Result).
 
-% followCheck(+Grammar, +Nonterminal, +Terminal, +Guard) : PRED
-followCheck(Grammar, nt(N), T, Guard) :-
-  rule(Grammar, nt(_), Rhs, Id),
-  \+ member(Id, Guard),
-  append([_, [nt(N)], B], Rhs),
-  first(Grammar, B, T).
-followCheck(Grammar, nt(N), T, Guard) :-
-  rule(Grammar, nt(X), Rhs, Id),
-  \+ member(Id, Guard),
-  append([_, [nt(N)], B], Rhs),
-  nullable(Grammar, B),
-  followCheck(Grammar, nt(X), T, [Id | Guard]).
+% followCheck(+Grammar, +Nonterminal, +Terminal) : PRED
+followCheck(Grammar, Nonterminal, Terminal) :-
+  followCheck(Grammar, Nonterminal, [], Grammar, Terminal).
+% followCheck(+GrammarTodo, +Nonterminal, +Visited, +Grammar, +Terminal) : PRED
+followCheck([prod(_, []) | Rest], nt(N), Visited, Original, T) :-
+  followCheck(Rest, nt(N), Visited, Original, T).
+followCheck([prod(_, [Rhs | _]) | _], nt(N), _, Original, T) :-
+  Rhs = [nt(N) | RhsRest],
+  first(Original, RhsRest, T).
+followCheck([prod(X, [Rhs | _]) | _], nt(N), Visited, Original, T) :-
+  Rhs = [nt(N) | RhsRest],
+  \+ member(nt(N), Visited),
+  nullable(Original, RhsRest),
+  followCheck(Original, nt(X), [nt(N) | Visited], Original, T).
+followCheck([prod(X, [Rhs | ProdRest]) | Rest], nt(N), Visited, Original, T) :-
+  Rhs = [_ | RhsRest],
+  followCheck([prod(X, [RhsRest | ProdRest]) | Rest], nt(N), Visited, Original, T).
+followCheck([prod(X, [[] | ProdRest]) | Rest], nt(N), Visited, Original, T) :-
+  followCheck([prod(X, ProdRest) | Rest], nt(N), Visited, Original, T).
 
 % first(+Grammar, +SententialForm, +Terminal) : PRED
 first(Grammar, Sentence, T) :-
