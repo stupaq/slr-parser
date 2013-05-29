@@ -258,24 +258,32 @@ deaugment([Follow | Rest], Acc, Result) :-
   deaugment(Rest, [Follow | Acc], Result).
 
 % followCheck(+Grammar, +Nonterminal, +Terminal) : PRED
-followCheck(Grammar, Nonterminal, Terminal) :-
-  followCheck(Grammar, Nonterminal, [], Grammar, Terminal).
+followCheck(Grammar, nt(N), Terminal) :-
+  followCheck(Grammar, nt(N), [nt(N)], Grammar, Terminal).
 % followCheck(+GrammarTodo, +Nonterminal, +Visited, +Grammar, +Terminal) : PRED
 followCheck([prod(_, []) | Rest], nt(N), Visited, Original, T) :-
   followCheck(Rest, nt(N), Visited, Original, T).
-followCheck([prod(_, [Rhs | _]) | _], nt(N), _, Original, T) :-
-  Rhs = [nt(N) | RhsRest],
-  first(Original, RhsRest, T).
-followCheck([prod(X, [Rhs | _]) | _], nt(N), Visited, Original, T) :-
-  Rhs = [nt(N) | RhsRest],
-  \+ member(nt(N), Visited),
-  nullable(Original, RhsRest),
-  followCheck(Original, nt(X), [nt(N) | Visited], Original, T).
-followCheck([prod(X, [Rhs | ProdRest]) | Rest], nt(N), Visited, Original, T) :-
-  Rhs = [_ | RhsRest],
-  followCheck([prod(X, [RhsRest | ProdRest]) | Rest], nt(N), Visited, Original, T).
 followCheck([prod(X, [[] | ProdRest]) | Rest], nt(N), Visited, Original, T) :-
   followCheck([prod(X, ProdRest) | Rest], nt(N), Visited, Original, T).
+followCheck([prod(X, [[W | RhsRest] | ProdRest]) | Rest], nt(N), Visited, Original, T) :-
+  (W \= nt(N) ->
+    Visited1 = Visited,
+    Ok = nope
+  ; (first(Original, RhsRest, T) ->
+      Ok = ok
+    ; (\+ member(nt(X), Visited), nullable(Original, RhsRest) ->
+        (followCheck(Original, nt(X), [nt(X) | Visited], Original, T) ->
+          Ok = ok
+        ; Visited1 = [nt(X) | Visited],
+          Ok = nope
+        )
+      ; Visited1 = Visited,
+        Ok = nope
+      )
+    )
+  ),
+  (Ok = ok -> true
+  ; followCheck([prod(X, [RhsRest | ProdRest]) | Rest], nt(N), Visited1, Original, T)).
 
 % first(+Grammar, +SententialForm, +Terminal) : PRED
 first(Grammar, Sentence, T) :-
