@@ -145,16 +145,15 @@ findState(State, [_ | Rest]) :-
 
 % symbols(+Set, -Symbols) : DET
 symbols(Set, Symbols) :-
-  symbols(Set, [], Symbols).
+  symbols(Set, [], Temp1),
+  remove_dups(Temp1, Symbols).
 % symbols(+Items, +Acc, -Symbols) : DET
 symbols([], Symbols, Symbols).
 symbols([item(N, NRhs, _) | Rest], Acc, Symbols) :-
-  append([[nt(N) | NRhs], Acc], Temp1),
-  remove_dups(Temp1, Acc1),
+  append([[nt(N) | NRhs], Acc], Acc1),
   symbols(Rest, Acc1, Symbols).
 symbols([prod(N, RhsList) | Rest], Acc, Symbols) :-
-  append([[nt(N)], Acc | RhsList], Temp1),
-  remove_dups(Temp1, Acc1),
+  append([[nt(N)], Acc | RhsList], Acc1),
   symbols(Rest, Acc1, Symbols).
 
 % terminals(+Grammar, -Terminals) : DET
@@ -289,9 +288,9 @@ first(Grammar, Sentence, T) :-
 % first(+Grammar, +SententialForm, +Terminal, +Guard) : PRED
 first(_, [T | _], T, _).
 first(Grammar, [nt(N) | _], T, Guard) :-
-  rule(Grammar, nt(N), Rhs, Id),
-  \+ member(Id, Guard), % first(Rhs, T) :- first(Rhs, T), ...
-  first(Grammar, Rhs, T, [Id | Guard]).
+  rule(Grammar, nt(N), Rhs),
+  \+ member(Rhs, Guard), % first(Rhs, T) :- first(Rhs, T), ...
+  first(Grammar, Rhs, T, [Rhs | Guard]).
 first(Grammar, Sentence, T, Guard) :-
   append([A, B], Sentence),
   \+ A = [],
@@ -318,9 +317,6 @@ rule([prod(N, RhsList) | _], nt(N), Rhs) :-
   member(Rhs, RhsList).
 rule([_ | Rest], nt(N), Rhs) :-
   rule(Rest, nt(N), Rhs).
-% rule(+Grammar, +Nonterminal, -ProductionRhs, -Ident) : NDET
-rule(Grammar, nt(N), Rhs, ident(N, Rhs)) :-
-  rule(Grammar, nt(N), Rhs).
 
 %% Helpers
 % intersect(+List1, +List2) : PRED
